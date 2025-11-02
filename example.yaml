@@ -1,0 +1,179 @@
+# Example ESPHome configuration for lvgl_game_runner component
+# This demonstrates how to set up a game runner with Snake game
+
+esphome:
+  name: game-runner-demo
+  platform: ESP32
+  board: esp32dev
+
+# External components
+external_components:
+  - source:
+      type: local
+      path: esphome/components
+    components: [lvgl_game_runner, game_snake, game_breakout]
+
+# Display configuration (example with ST7789V)
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+
+display:
+  - platform: st7789v
+    id: main_display
+    model: TTGO TDisplay 135x240
+    cs_pin: GPIO5
+    dc_pin: GPIO16
+    reset_pin: GPIO23
+    rotation: 270
+    update_interval: never  # LVGL will handle updates
+
+# LVGL configuration
+lvgl:
+  displays:
+    - main_display
+
+  # Define the canvas for game rendering
+  pages:
+    - id: game_page
+      widgets:
+        - canvas:
+            id: game_canvas
+            width: 240
+            height: 135
+            buffer_size: auto
+            bg_color: 0x000000
+
+# Game components (register games with the runner)
+game_snake:
+  id: snake
+
+game_breakout:
+  id: breakout
+
+# Game runner configuration
+lvgl_game_runner:
+  - id: snake_game
+    game: snake
+    canvas: game_canvas
+    fps: 30
+    start_paused: false
+    x: 0
+    y: 0
+    width: 0   # 0 = use full canvas width
+    height: 0  # 0 = use full canvas height
+
+# Input controls - Example with buttons
+binary_sensor:
+  # D-pad style controls
+  - platform: gpio
+    id: button_up
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "UP"
+
+  - platform: gpio
+    id: button_down
+    pin:
+      number: GPIO35
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "DOWN"
+
+  - platform: gpio
+    id: button_left
+    pin:
+      number: GPIO34
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "LEFT"
+
+  - platform: gpio
+    id: button_right
+    pin:
+      number: GPIO39
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "RIGHT"
+
+  # Start/restart button
+  - platform: gpio
+    id: button_start
+    pin:
+      number: GPIO26
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "START"
+
+# Alternative: Rotary encoder input
+# sensor:
+#   - platform: rotary_encoder
+#     id: game_knob
+#     pin_a: GPIO32
+#     pin_b: GPIO33
+#     resolution: 1
+#     on_clockwise:
+#       - lvgl_game_runner.send_input:
+#           id: snake_game
+#           input: "ROTATE_CW"
+#     on_anticlockwise:
+#       - lvgl_game_runner.send_input:
+#           id: snake_game
+#           input: "ROTATE_CCW"
+
+# Example automation: pause/resume
+# script:
+#   - id: toggle_game
+#     then:
+#       - lvgl_game_runner.toggle: snake_game
+#
+#   - id: restart_game
+#     then:
+#       - lvgl_game_runner.start: snake_game
+
+# Home Assistant integration (optional)
+api:
+  services:
+    - service: start_game
+      then:
+        - lvgl_game_runner.start: snake_game
+
+    - service: pause_game
+      then:
+        - lvgl_game_runner.pause: snake_game
+
+    - service: resume_game
+      then:
+        - lvgl_game_runner.resume: snake_game
+
+    - service: set_game
+      variables:
+        game_name: string
+      then:
+        - lvgl_game_runner.set_game:
+            id: snake_game
+            game: !lambda 'return game_name;'
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+logger:
+  level: DEBUG
