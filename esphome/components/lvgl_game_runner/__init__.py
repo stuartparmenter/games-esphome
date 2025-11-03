@@ -14,6 +14,7 @@ from esphome.const import (
     CONF_Y,
 )
 from esphome.components import lvgl
+from esphome.components.esp32 import add_idf_component
 from esphome import automation
 
 DEPENDENCIES = ["lvgl"]
@@ -226,16 +227,18 @@ async def to_code(config):
         cg.add_define("USE_BLUEPAD32")
 
         # Add IDF components
-        cg.add_idf_component(
-            name="bluepad32",
-            repo="ricardoquesada/bluepad32",
-            path="src/components/bluepad32",
-        )
-        cg.add_idf_component(
+        add_idf_component(
             name="btstack",
-            repo="ricardoquesada/bluepad32",
-            path="src/components/btstack",
+            repo="https://github.com/bluekitchen/btstack.git",
+            ref="v1.7-rc1",
         )
+        add_idf_component(
+            name="bluepad32",
+            repo="https://github.com/ricardoquesada/bluepad32.git",
+            path="src/components/bluepad32",
+            ref="4.2.0"
+        )
+
 
         # Configure sdkconfig for Bluetooth
         cg.add_platformio_option(
