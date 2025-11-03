@@ -71,6 +71,12 @@ void LvglGameRunner::setup() {
   if (!running_) {
     this->disable_loop();
   }
+
+#ifdef USE_BLUEPAD32
+  // Start Bluepad32 input on CPU0
+  ESP_LOGI(TAG, "Starting Bluepad32 Bluetooth gamepad input");
+  bluepad32_.start(&input_handler_);
+#endif
 }
 
 void LvglGameRunner::loop() {

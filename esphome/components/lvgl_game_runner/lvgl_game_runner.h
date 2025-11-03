@@ -15,6 +15,10 @@
 #include "game_registry.h"
 #include "input_handler.h"
 
+#ifdef USE_BLUEPAD32
+#include "bluepad32_input.h"
+#endif
+
 extern "C" {
 #include <lvgl.h>
 }
@@ -68,6 +72,10 @@ class LvglGameRunner : public Component {
   std::string game_key_;
   GameBase *game_{nullptr};  // Raw pointer - game lifetime managed by components
   InputHandler input_handler_;
+
+#ifdef USE_BLUEPAD32
+  Bluepad32Input bluepad32_;
+#endif
 
   // Sub-rectangle (w/h == 0 => follow canvas size)
   Area area_{};

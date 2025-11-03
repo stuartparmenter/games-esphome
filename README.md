@@ -6,7 +6,8 @@ A game runner component for ESPHome that renders games on LVGL Canvas widgets.
 
 - **Component-based Architecture**: Games are independent ESPHome components
 - **Multiple Game Support**: Easy addition of new games as separate components
-- **Flexible Input System**: Supports buttons, rotary encoders, and future touchscreen input
+- **Flexible Input System**: Supports buttons, rotary encoders, Bluetooth gamepads, and future touchscreen input
+- **Bluetooth Gamepad Support**: Optional Bluepad32 integration for wireless controllers (Xbox, PlayStation, Switch, etc.)
 - **FPS Control**: Configurable frame rate (1-240 FPS)
 - **Canvas-based Rendering**: Uses LVGL canvas for efficient drawing
 - **Performance Metrics**: Optional compile-time metrics tracking
@@ -110,11 +111,12 @@ game_snake:
 
 # 2. Configure the game runner
 lvgl_game_runner:
-  - id: my_game
-    game: snake        # References the registered game name
-    canvas: game_canvas
-    fps: 30
-    start_paused: false
+  id: my_game
+  game: snake        # References the registered game name
+  canvas: game_canvas
+  fps: 30
+  start_paused: false
+  bluepad32: false   # Optional: Enable Bluetooth gamepad support
 ```
 
 ## Input Configuration
@@ -145,6 +147,39 @@ sensor:
           id: my_game
           input: "ROTATE_CW"
 ```
+
+### Bluetooth Gamepads (Bluepad32)
+
+Enable wireless gamepad support with Bluepad32:
+
+```yaml
+esp32:
+  framework:
+    type: esp-idf  # Required for Bluepad32
+
+lvgl_game_runner:
+  id: my_game
+  game: snake
+  canvas: game_canvas
+  fps: 30
+  bluepad32: true  # Enable Bluetooth gamepad support
+```
+
+**Supported Controllers:**
+- Xbox One/Series controllers
+- PlayStation DualShock 4 / DualSense (PS4/PS5)
+- Nintendo Switch Pro / Joy-Cons
+- 8BitDo controllers
+- Generic HID gamepads
+
+**Features:**
+- Automatic controller pairing (no manual setup required)
+- D-pad and analog stick support (with deadzone)
+- Button mapping (A, B buttons + directional input)
+- Runs on dedicated CPU core (CPU0) for optimal performance
+- Thread-safe integration with existing GPIO inputs
+
+**Note:** Bluepad32 requires exclusive Bluetooth access and cannot be used with other ESPHome BLE components (`esp32_ble_tracker`, `bluetooth_proxy`, etc.). DualShock 3 (PS3) controllers are not supported without patches.
 
 ## Actions
 
@@ -234,9 +269,9 @@ game_yourname:
   id: my_custom_game
 
 lvgl_game_runner:
-  - id: runner
-    game: yourname
-    canvas: game_canvas
+  id: runner
+  game: yourname
+  canvas: game_canvas
 ```
 
 See [example.yaml](example.yaml) and existing games for complete examples.
@@ -252,12 +287,13 @@ Target performance on ESP32:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `game` | string | required | Game name ("snake", "breakout") |
+| `game` | string | required | Game name ("snake", "breakout", "pong") |
 | `canvas` | id | required | LVGL canvas widget ID |
 | `fps` | float | 30.0 | Target frame rate (1-240) |
 | `x`, `y` | int | 0 | Sub-region offset |
 | `width`, `height` | int | 0 | Sub-region size (0=full canvas) |
 | `start_paused` | bool | false | Start in paused state |
+| `bluepad32` | bool | false | Enable Bluetooth gamepad support (requires ESP-IDF) |
 
 ## Examples
 

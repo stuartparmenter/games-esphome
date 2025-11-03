@@ -6,6 +6,11 @@ esphome:
   platform: ESP32
   board: esp32dev
 
+# Required for Bluepad32 Bluetooth gamepad support
+esp32:
+  framework:
+    type: esp-idf  # Bluepad32 requires ESP-IDF framework
+
 # External components
 external_components:
   - source:
@@ -53,15 +58,51 @@ game_breakout:
 
 # Game runner configuration
 lvgl_game_runner:
-  - id: snake_game
-    game: snake
-    canvas: game_canvas
-    fps: 30
-    start_paused: false
-    x: 0
-    y: 0
-    width: 0   # 0 = use full canvas width
-    height: 0  # 0 = use full canvas height
+  id: snake_game
+  game: snake
+  canvas: game_canvas
+  fps: 30
+  start_paused: false
+  x: 0
+  y: 0
+  width: 0   # 0 = use full canvas width
+  height: 0  # 0 = use full canvas height
+  bluepad32: false  # Set to true to enable Bluetooth gamepad support
+
+# ============================================================
+# BLUEPAD32 BLUETOOTH GAMEPAD SUPPORT
+# ============================================================
+# To enable Bluetooth gamepad input, set bluepad32: true
+#
+# This will:
+# - Add Bluepad32 and BTStack as ESP-IDF components
+# - Run Bluetooth stack on CPU0 (dedicated task)
+# - Accept connections from Xbox, PlayStation, Switch controllers, etc.
+# - Map gamepad inputs (D-pad, buttons, analog sticks) to InputHandler
+#
+# Requirements:
+# - ESP-IDF framework (configured above)
+# - Cannot use with other ESPHome Bluetooth components
+#   (esp32_ble_tracker, bluetooth_proxy, etc.)
+#
+# Supported controllers (no patches needed):
+# - Xbox One/Series controllers
+# - DualShock 4 / DualSense (PS4/PS5)
+# - Nintendo Switch Pro / Joy-Cons
+# - 8BitDo controllers
+# - Generic HID gamepads
+#
+# Note: DualShock 3 (PS3) requires patches and is not supported
+#
+# Example with Bluepad32 enabled:
+#
+# lvgl_game_runner:
+#   id: snake_game
+#   game: snake
+#   canvas: game_canvas
+#   fps: 30
+#   bluepad32: true  # Enable Bluetooth gamepad input!
+# ============================================================
 
 # Input controls - Example with buttons
 binary_sensor:
