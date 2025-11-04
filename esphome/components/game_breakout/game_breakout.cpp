@@ -26,7 +26,9 @@ GameBreakout::GameBreakout()
       paddle_y_(0),
       paddle_hit_(false),
       autoplay_(false),
-      input_position_(25) {  // Start in middle
+      input_position_(25),  // Start in middle
+      left_held_(false),
+      right_held_(false) {
   // Initialize balls
   for (int i = 0; i < MAX_BALLS; i++) {
     balls_[i] = {0, 0, 0, 0, false};
@@ -58,31 +60,32 @@ void GameBreakout::reset() {
 }
 
 void GameBreakout::on_input(const InputEvent &event) {
-  if (!event.pressed)
-    return;
-
   switch (event.type) {
     case InputType::LEFT:
-      if (input_position_ > 0)
-        input_position_--;
+      // Track held state for continuous movement
+      left_held_ = event.pressed;
       break;
     case InputType::RIGHT:
-      if (input_position_ < 50)
-        input_position_++;
+      // Track held state for continuous movement
+      right_held_ = event.pressed;
       break;
     case InputType::A:
     case InputType::B:
     case InputType::START:
-      // Toggle autoplay
-      autoplay_ = !autoplay_;
-      ESP_LOGI(TAG, "Autoplay: %s", autoplay_ ? "ON" : "OFF");
+      // Toggle autoplay on button press only
+      if (event.pressed) {
+        autoplay_ = !autoplay_;
+        ESP_LOGI(TAG, "Autoplay: %s", autoplay_ ? "ON" : "OFF");
+      }
       break;
     case InputType::ROTATE_CW:
-      if (input_position_ < 50)
+      // Rotary encoder - treat each click as a single increment
+      if (event.pressed && input_position_ < 50)
         input_position_++;
       break;
     case InputType::ROTATE_CCW:
-      if (input_position_ > 0)
+      // Rotary encoder - treat each click as a single decrement
+      if (event.pressed && input_position_ > 0)
         input_position_--;
       break;
     default:
@@ -424,6 +427,19 @@ void GameBreakout::step(float dt) {
   }
 
   state_.score = score_ticker_;
+
+  // Apply continuous movement from held directions
+  // Speed: 100 positions/second = full range (0-50) in 0.5 seconds
+  constexpr float PADDLE_SPEED = 100.0f;  // positions per second
+  if (left_held_ && !right_held_) {
+    input_position_ -= PADDLE_SPEED * dt;
+    if (input_position_ < 0)
+      input_position_ = 0;
+  } else if (right_held_ && !left_held_) {
+    input_position_ += PADDLE_SPEED * dt;
+    if (input_position_ > 50)
+      input_position_ = 50;
+  }
 
   // Calculate paddle position
   paddle_x_ = input_position_ * ((float) (area_.w - paddle_w_) / 50);

@@ -109,7 +109,9 @@ class GameBreakout : public GameBase {
 
   // Input state
   bool autoplay_;
-  int input_position_;  // Simulated knob position (0-50)
+  float input_position_;  // Simulated knob position (0-50, float for smooth movement)
+  bool left_held_;        // Track if left direction is held
+  bool right_held_;       // Track if right direction is held
 
   // Colors
   lv_color_t color_on_;
