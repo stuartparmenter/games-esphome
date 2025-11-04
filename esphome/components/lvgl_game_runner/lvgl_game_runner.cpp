@@ -46,6 +46,43 @@ void LvglGameRunner::send_input(InputType type, bool pressed, int16_t value) {
   input_handler_.push_event(InputEvent(type, pressed, value));
 }
 
+void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t value) {
+  // Map string to InputType (same logic as SendInputAction)
+  InputType type = InputType::UP;
+  if (strcmp(input_str, "UP") == 0)
+    type = InputType::UP;
+  else if (strcmp(input_str, "DOWN") == 0)
+    type = InputType::DOWN;
+  else if (strcmp(input_str, "LEFT") == 0)
+    type = InputType::LEFT;
+  else if (strcmp(input_str, "RIGHT") == 0)
+    type = InputType::RIGHT;
+  else if (strcmp(input_str, "A") == 0)
+    type = InputType::A;
+  else if (strcmp(input_str, "B") == 0)
+    type = InputType::B;
+  else if (strcmp(input_str, "SELECT") == 0)
+    type = InputType::SELECT;
+  else if (strcmp(input_str, "START") == 0)
+    type = InputType::START;
+  else if (strcmp(input_str, "L_TRIGGER") == 0)
+    type = InputType::L_TRIGGER;
+  else if (strcmp(input_str, "R_TRIGGER") == 0)
+    type = InputType::R_TRIGGER;
+  else if (strcmp(input_str, "ROTATE_CW") == 0)
+    type = InputType::ROTATE_CW;
+  else if (strcmp(input_str, "ROTATE_CCW") == 0)
+    type = InputType::ROTATE_CCW;
+  else if (strcmp(input_str, "TOUCH") == 0)
+    type = InputType::TOUCH;
+  else {
+    ESP_LOGW(TAG, "Unknown input type: %s", input_str);
+    return;
+  }
+
+  send_input(type, pressed, value);
+}
+
 void LvglGameRunner::send_input_event(const InputEvent &event) { input_handler_.push_event(event); }
 
 void LvglGameRunner::setup_binding(lv_obj_t *canvas_obj, const std::string &game_key, int x, int y, int w, int h,

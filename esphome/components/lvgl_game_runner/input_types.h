@@ -25,6 +25,10 @@ enum class InputType {
   SELECT,
   START,
 
+  // Analog triggers (use event.value for analog data 0-255)
+  L_TRIGGER,
+  R_TRIGGER,
+
   // Rotary encoder
   ROTATE_CW,   // Clockwise rotation
   ROTATE_CCW,  // Counter-clockwise rotation
