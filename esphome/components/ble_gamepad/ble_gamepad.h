@@ -128,15 +128,6 @@ class BLEGamepad : public Component,
   void handle_notification_(uint8_t *value, uint16_t value_len);
 
   /**
-   * @brief Identify controller type from device name/appearance and create parser.
-   *
-   * @param device_name BLE device name
-   * @param appearance BLE appearance value
-   * @return Unique pointer to controller instance, or nullptr if unsupported
-   */
-  std::unique_ptr<ControllerBase> create_controller_(const char *device_name, uint16_t appearance);
-
-  /**
    * @brief Connect to discovered HID device.
    *
    * @param bda Device Bluetooth address
@@ -202,6 +193,10 @@ class BLEGamepad : public Component,
     COMPLETE
   };
   InitState init_state_{InitState::IDLE};
+
+  // Service discovery retry counter (prevents infinite loops if services missing)
+  static constexpr uint8_t MAX_DISCOVERY_RETRIES = 3;
+  uint8_t service_discovery_retries_{0};
 
   // Index for sequential notification registration (Bluedroid requirement)
   size_t current_notify_index_{0};

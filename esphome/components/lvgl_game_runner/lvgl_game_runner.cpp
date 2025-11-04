@@ -6,6 +6,7 @@
 #include "esp_timer.h"
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 namespace esphome::lvgl_game_runner {
 
@@ -47,40 +48,30 @@ void LvglGameRunner::send_input(InputType type, bool pressed, int16_t value) {
 }
 
 void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t value) {
-  // Map string to InputType (same logic as SendInputAction)
-  InputType type = InputType::UP;
-  if (strcmp(input_str, "UP") == 0)
-    type = InputType::UP;
-  else if (strcmp(input_str, "DOWN") == 0)
-    type = InputType::DOWN;
-  else if (strcmp(input_str, "LEFT") == 0)
-    type = InputType::LEFT;
-  else if (strcmp(input_str, "RIGHT") == 0)
-    type = InputType::RIGHT;
-  else if (strcmp(input_str, "A") == 0)
-    type = InputType::A;
-  else if (strcmp(input_str, "B") == 0)
-    type = InputType::B;
-  else if (strcmp(input_str, "SELECT") == 0)
-    type = InputType::SELECT;
-  else if (strcmp(input_str, "START") == 0)
-    type = InputType::START;
-  else if (strcmp(input_str, "L_TRIGGER") == 0)
-    type = InputType::L_TRIGGER;
-  else if (strcmp(input_str, "R_TRIGGER") == 0)
-    type = InputType::R_TRIGGER;
-  else if (strcmp(input_str, "ROTATE_CW") == 0)
-    type = InputType::ROTATE_CW;
-  else if (strcmp(input_str, "ROTATE_CCW") == 0)
-    type = InputType::ROTATE_CCW;
-  else if (strcmp(input_str, "TOUCH") == 0)
-    type = InputType::TOUCH;
-  else {
+  // Map string to InputType using hash table for O(1) lookup instead of O(n) string comparisons
+  static const std::unordered_map<std::string, InputType> input_type_map = {
+      {"UP", InputType::UP},
+      {"DOWN", InputType::DOWN},
+      {"LEFT", InputType::LEFT},
+      {"RIGHT", InputType::RIGHT},
+      {"A", InputType::A},
+      {"B", InputType::B},
+      {"SELECT", InputType::SELECT},
+      {"START", InputType::START},
+      {"L_TRIGGER", InputType::L_TRIGGER},
+      {"R_TRIGGER", InputType::R_TRIGGER},
+      {"ROTATE_CW", InputType::ROTATE_CW},
+      {"ROTATE_CCW", InputType::ROTATE_CCW},
+      {"TOUCH", InputType::TOUCH},
+  };
+
+  auto it = input_type_map.find(input_str);
+  if (it == input_type_map.end()) {
     ESP_LOGW(TAG, "Unknown input type: %s", input_str);
     return;
   }
 
-  send_input(type, pressed, value);
+  send_input(it->second, pressed, value);
 }
 
 void LvglGameRunner::send_input_event(const InputEvent &event) { input_handler_.push_event(event); }

@@ -432,13 +432,9 @@ void GameBreakout::step(float dt) {
   // Speed: 100 positions/second = full range (0-50) in 0.5 seconds
   constexpr float PADDLE_SPEED = 100.0f;  // positions per second
   if (left_held_ && !right_held_) {
-    input_position_ -= PADDLE_SPEED * dt;
-    if (input_position_ < 0)
-      input_position_ = 0;
+    input_position_ = std::clamp(input_position_ - PADDLE_SPEED * dt, 0.0f, 50.0f);
   } else if (right_held_ && !left_held_) {
-    input_position_ += PADDLE_SPEED * dt;
-    if (input_position_ > 50)
-      input_position_ = 50;
+    input_position_ = std::clamp(input_position_ + PADDLE_SPEED * dt, 0.0f, 50.0f);
   }
 
   // Calculate paddle position
@@ -481,7 +477,7 @@ void GameBreakout::step(float dt) {
     level_started_ = true;
 
     // Shoot
-    if (shooter_level_ && (frame_ % 15 == 0)) {
+    if (shooter_level_ && (frame_ % SHOOTER_COOLDOWN_FRAMES == 0)) {
       shoot_projectile_();
     }
 

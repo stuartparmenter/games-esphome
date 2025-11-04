@@ -16,7 +16,8 @@ static const char *const TAG = "ble_gamepad";
 // Known Xbox controller identifiers
 static constexpr uint16_t BLE_APPEARANCE_GAMEPAD = 0x03C4;  // Generic Gamepad
 
-// GATT app ID for registration
+// GATT app ID for registration (arbitrary value, must be unique within application)
+// This ID is used to identify this component's GATT client instance
 static constexpr uint16_t GATTC_APP_ID = 0x1234;
 
 void BLEGamepad::setup() {
@@ -69,12 +70,12 @@ void BLEGamepad::loop() {
 
   // Fire triggers and log changes
   if (button_changed) {
-    ESP_LOGI(TAG, "Button state changed:");
+    ESP_LOGD(TAG, "Button state changed:");
 
     // Macro to check a button change, log it, and fire callback
 #define CHECK_BUTTON(field, name, log_name) \
   if (current.buttons.field != prev_state_.buttons.field) { \
-    ESP_LOGI(TAG, "  %s: %s", log_name, current.buttons.field ? "PRESSED" : "released"); \
+    ESP_LOGD(TAG, "  %s: %s", log_name, current.buttons.field ? "PRESSED" : "released"); \
     on_button_callbacks_.call(name, current.buttons.field); \
   }
 
@@ -105,7 +106,7 @@ void BLEGamepad::loop() {
 #undef CHECK_BUTTON
   }
   if (stick_changed) {
-    ESP_LOGI(TAG, "Stick changed: LX=%d LY=%d RX=%d RY=%d", current.left_stick_x, current.left_stick_y,
+    ESP_LOGD(TAG, "Stick changed: LX=%d LY=%d RX=%d RY=%d", current.left_stick_x, current.left_stick_y,
              current.right_stick_x, current.right_stick_y);
     on_stick_callbacks_.call();
   }
@@ -114,7 +115,7 @@ void BLEGamepad::loop() {
   constexpr uint8_t TRIGGER_THRESHOLD = 10;
   if (abs(static_cast<int>(current.left_trigger) - static_cast<int>(prev_state_.left_trigger)) > TRIGGER_THRESHOLD ||
       abs(static_cast<int>(current.right_trigger) - static_cast<int>(prev_state_.right_trigger)) > TRIGGER_THRESHOLD) {
-    ESP_LOGI(TAG, "Triggers: LT=%d RT=%d", current.left_trigger, current.right_trigger);
+    ESP_LOGD(TAG, "Triggers: LT=%d RT=%d", current.left_trigger, current.right_trigger);
   }
 
   // Update previous state
@@ -265,6 +266,14 @@ void BLEGamepad::gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_res
     uint8_t length = adv_data[i];
     if (length == 0)
       break;  // Invalid length, stop parsing
+
+    // Validate that entire AD structure is within buffer bounds
+    if (i + 1 + length > adv_data_len) {
+      ESP_LOGW(TAG, "Malformed advertisement data: structure exceeds buffer (offset %d, length %d, buffer size %d)", i,
+               length, adv_data_len);
+      break;
+    }
+
     uint8_t type = adv_data[i + 1];
 
     // Check for complete local name
@@ -397,7 +406,7 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
     case ESP_GATTC_CLOSE_EVT: {
       ESP_LOGI(TAG, "Disconnected from device");
       this->connected_ = false;
-      this->gattc_if_ = ESP_GATT_IF_NONE;
+      // Note: gattc_if_ remains valid for the app ID registration, don't reset
 
       if (this->active_controller_) {
         this->active_controller_->on_disconnect();
@@ -444,7 +453,15 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
       // Check if DIS was searched for but not found (both handles still 0)
       // This happens when Xbox controller doesn't have DIS service
       if (this->dis_service_start_handle_ == 0 && this->hid_service_start_handle_ == 0) {
-        ESP_LOGI(TAG, "DIS service not found, searching for HID service");
+        if (this->service_discovery_retries_ >= MAX_DISCOVERY_RETRIES) {
+          ESP_LOGE(TAG, "Service discovery failed after %d retries - no DIS or HID services found",
+                   MAX_DISCOVERY_RETRIES);
+          this->disconnect_();
+          break;
+        }
+        this->service_discovery_retries_++;
+        ESP_LOGI(TAG, "DIS service not found, searching for HID service (attempt %d/%d)",
+                 this->service_discovery_retries_, MAX_DISCOVERY_RETRIES);
         esp_bt_uuid_t hid_uuid;
         hid_uuid.len = ESP_UUID_LEN_16;
         hid_uuid.uuid.uuid16 = HID_SERVICE_UUID;
@@ -473,15 +490,15 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
         }
 
         // Get all characteristics in DIS service
-        esp_gattc_char_elem_t *char_elems = new esp_gattc_char_elem_t[char_count];
+        auto char_elems = std::make_unique<esp_gattc_char_elem_t[]>(char_count);
         uint16_t actual_count = char_count;
 
         status = esp_ble_gattc_get_all_char(gattc_if, this->conn_id_, this->dis_service_start_handle_,
-                                            this->dis_service_end_handle_, char_elems, &actual_count, 0);
+                                            this->dis_service_end_handle_, char_elems.get(), &actual_count, 0);
 
         if (status != ESP_GATT_OK) {
           ESP_LOGW(TAG, "Failed to get DIS characteristics, proceeding to HID discovery");
-          delete[] char_elems;
+          // char_elems automatically cleaned up by unique_ptr
           // Skip DIS and go straight to HID
           esp_bt_uuid_t hid_uuid;
           hid_uuid.len = ESP_UUID_LEN_16;
@@ -498,8 +515,7 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
             break;
           }
         }
-
-        delete[] char_elems;
+        // char_elems automatically cleaned up by unique_ptr at end of scope
 
         if (this->dis_pnp_id_handle_ != 0) {
           // Read PnP ID to get VID/PID
@@ -539,15 +555,15 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
       ESP_LOGI(TAG, "Found %d characteristics", char_count);
 
       // Allocate buffer for characteristics
-      esp_gattc_char_elem_t *char_elems = new esp_gattc_char_elem_t[char_count];
+      auto char_elems = std::make_unique<esp_gattc_char_elem_t[]>(char_count);
       uint16_t actual_count = char_count;
 
       status = esp_ble_gattc_get_all_char(gattc_if, this->conn_id_, this->hid_service_start_handle_,
-                                          this->hid_service_end_handle_, char_elems, &actual_count, 0);
+                                          this->hid_service_end_handle_, char_elems.get(), &actual_count, 0);
 
       if (status != ESP_GATT_OK) {
         ESP_LOGE(TAG, "Failed to get characteristics");
-        delete[] char_elems;
+        // char_elems automatically cleaned up by unique_ptr
         this->disconnect_();
         break;
       }
@@ -587,11 +603,11 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
                                                   char_elems[i].char_handle, &descr_count);
 
             if (status == ESP_GATT_OK && descr_count > 0) {
-              esp_gattc_descr_elem_t *descr_elems = new esp_gattc_descr_elem_t[descr_count];
+              auto descr_elems = std::make_unique<esp_gattc_descr_elem_t[]>(descr_count);
               uint16_t actual_descr_count = descr_count;
 
-              status = esp_ble_gattc_get_all_descr(gattc_if, this->conn_id_, char_elems[i].char_handle, descr_elems,
-                                                   &actual_descr_count, 0);
+              status = esp_ble_gattc_get_all_descr(gattc_if, this->conn_id_, char_elems[i].char_handle,
+                                                   descr_elems.get(), &actual_descr_count, 0);
 
               if (status == ESP_GATT_OK) {
                 // Find CCC descriptor
@@ -604,7 +620,7 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
                   }
                 }
               }
-              delete[] descr_elems;
+              // descr_elems automatically cleaned up by unique_ptr at end of scope
             }
 
             // Store this HID Report characteristic
@@ -614,8 +630,7 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
           }
         }
       }
-
-      delete[] char_elems;
+      // char_elems automatically cleaned up by unique_ptr at end of scope
 
       // Validate required characteristics were found
       if (this->hid_report_chars_.empty()) {
@@ -777,6 +792,13 @@ void BLEGamepad::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t g
 
         // HOGP initialization complete - create controller instance
         this->init_state_ = InitState::COMPLETE;
+        this->service_discovery_retries_ = 0;  // Reset retry counter on successful connection
+
+        // Xbox-only limitation: Among common console controllers, only Xbox supports standard BLE HID
+        // - Xbox One S/X/Series (Model 1708+, revision 1914) use BLE HID Profile
+        // - PlayStation controllers use proprietary Bluetooth protocols (not standard HID)
+        // - Switch Pro controllers require reverse-engineered HID report descriptors
+        // Future: Could detect controller type via VID/PID from DIS PnP ID characteristic
         this->active_controller_ = std::make_unique<XboxController>();
         if (this->active_controller_) {
           this->active_controller_->on_connect();
@@ -938,15 +960,6 @@ void BLEGamepad::handle_notification_(uint8_t *value, uint16_t value_len) {
   }
 }
 
-std::unique_ptr<ControllerBase> BLEGamepad::create_controller_(const char *device_name, uint16_t appearance) {
-  // Identify controller type from device name or appearance
-  // For now, assume Xbox controller
-  // TODO: Implement proper detection based on device name/appearance
-
-  ESP_LOGI(TAG, "Creating Xbox controller instance");
-  return std::make_unique<XboxController>();
-}
-
 void BLEGamepad::connect_to_device_(esp_bd_addr_t bda) {
   ESP_LOGI(TAG, "Connecting to device: " ESP_BD_ADDR_STR, ESP_BD_ADDR_HEX(bda));
   esp_ble_gattc_open(gattc_if_, bda, BLE_ADDR_TYPE_PUBLIC, true);
@@ -954,7 +967,17 @@ void BLEGamepad::connect_to_device_(esp_bd_addr_t bda) {
 
 void BLEGamepad::disconnect_() {
   if (connected_) {
-    esp_ble_gattc_close(gattc_if_, conn_id_);
+    esp_err_t ret = esp_ble_gattc_close(gattc_if_, conn_id_);
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to close GATT connection: %s", esp_err_to_name(ret));
+      // Force cleanup even if close fails to prevent stuck state
+      this->connected_ = false;
+      if (this->active_controller_) {
+        this->active_controller_->on_disconnect();
+        this->active_controller_.reset();
+      }
+      this->on_disconnect_trigger_->trigger();
+    }
   }
 }
 

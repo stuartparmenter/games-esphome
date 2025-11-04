@@ -52,7 +52,8 @@ class GameBreakout : public GameBase {
   static constexpr int LIVES_MAX = 6;
   static constexpr int MAX_BALLS = 10;
   static constexpr int MAX_PROJECTILES = 8;
-  static constexpr int BRICK_COUNT = 48;  // 8 columns x 6 rows
+  static constexpr int SHOOTER_COOLDOWN_FRAMES = 15;  // ~0.5s at 30fps
+  static constexpr int BRICK_COUNT = 48;              // 8 columns x 6 rows
 
   // Brick types
   enum BrickType {

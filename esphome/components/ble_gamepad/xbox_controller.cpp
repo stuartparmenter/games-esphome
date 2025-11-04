@@ -105,12 +105,16 @@ bool XboxController::parse_ble_report_(const uint8_t *data, uint16_t len) {
   uint8_t btn15 = data[15];
   state_.buttons.button_misc = (btn15 & 0x01) != 0;  // Share button (bit 0)
 
-  // Single comprehensive log line showing all 16 bytes + parsed values
-  ESP_LOGI(TAG,
-           "Report: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X | LT=%3d RT=%3d "
-           "B13=0x%02X B14=0x%02X B15=0x%02X Hat=%d",
-           data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
-           data[12], data[13], data[14], data[15], state_.left_trigger, state_.right_trigger, btn13, btn14, btn15, hat);
+  // Single comprehensive log line showing all 16 bytes + parsed values (throttled to reduce log spam)
+  static uint32_t log_counter = 0;
+  if (++log_counter % 30 == 0) {  // Log once per second at 30fps
+    ESP_LOGD(TAG,
+             "Report: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X | LT=%3d RT=%3d "
+             "B13=0x%02X B14=0x%02X B15=0x%02X Hat=%d",
+             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10],
+             data[11], data[12], data[13], data[14], data[15], state_.left_trigger, state_.right_trigger, btn13, btn14,
+             btn15, hat);
+  }
 
   return true;
 }
@@ -131,18 +135,20 @@ bool XboxController::set_rumble(uint8_t weak_magnitude, uint8_t strong_magnitude
   rumble_.strong = strong_magnitude;
 
   // TODO: Implement BLE HID output report for rumble
-  // Xbox BLE controllers support rumble via HID output reports
-  // Requires writing to HID Report characteristic with proper format
+  // Xbox BLE controllers support rumble via HID output reports (report ID 0x03)
+  // Requires writing to HID Report Output characteristic with format:
+  // [Report ID, Enable Rumble, Strong Motor, Weak Motor, Duration Hi, Duration Lo, ...]
+  // Reference: https://github.com/atar-axis/xpadneo/blob/master/docs/protocol.md
 
-  ESP_LOGD(TAG, "Rumble set: weak=%d, strong=%d, duration=%dms (not implemented)", weak_magnitude, strong_magnitude,
-           duration_ms);
+  ESP_LOGW(TAG, "Rumble not yet implemented for BLE Xbox controllers (weak=%d, strong=%d, duration=%dms)",
+           weak_magnitude, strong_magnitude, duration_ms);
   return false;  // Not implemented yet
 }
 
 bool XboxController::set_led_color(uint8_t r, uint8_t g, uint8_t b) {
-  // Xbox controllers don't have RGB LEDs (only white LEDs)
-  // This function is not applicable for Xbox
-  ESP_LOGD(TAG, "LED color not supported on Xbox controllers");
+  // Xbox controllers don't have RGB LEDs (only white LEDs with fixed patterns)
+  // LED control is not exposed via BLE HID - requires proprietary Xbox Wireless protocol
+  ESP_LOGW(TAG, "LED color control not supported on Xbox BLE controllers");
   return false;
 }
 
