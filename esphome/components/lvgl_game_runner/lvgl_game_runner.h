@@ -45,6 +45,7 @@ class LvglGameRunner : public Component {
 
   // Input handling
   void send_input(InputType type, bool pressed = true, int16_t value = 0);
+  void send_input(const char *input_str, bool pressed = true, int16_t value = 0);  // String overload for YAML
   void send_input_event(const InputEvent &event);
 
   // Per-instance timing
@@ -211,6 +212,10 @@ template<typename... Ts> class SendInputAction : public Action<Ts...> {
       type = InputType::SELECT;
     else if (input_str == "START")
       type = InputType::START;
+    else if (input_str == "L_TRIGGER")
+      type = InputType::L_TRIGGER;
+    else if (input_str == "R_TRIGGER")
+      type = InputType::R_TRIGGER;
     else if (input_str == "ROTATE_CW")
       type = InputType::ROTATE_CW;
     else if (input_str == "ROTATE_CCW")

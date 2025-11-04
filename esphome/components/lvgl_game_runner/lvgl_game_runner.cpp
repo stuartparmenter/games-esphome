@@ -6,6 +6,7 @@
 #include "esp_timer.h"
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 namespace esphome::lvgl_game_runner {
 
@@ -44,6 +45,33 @@ void LvglGameRunner::start() {
 
 void LvglGameRunner::send_input(InputType type, bool pressed, int16_t value) {
   input_handler_.push_event(InputEvent(type, pressed, value));
+}
+
+void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t value) {
+  // Map string to InputType using hash table for O(1) lookup instead of O(n) string comparisons
+  static const std::unordered_map<std::string, InputType> input_type_map = {
+      {"UP", InputType::UP},
+      {"DOWN", InputType::DOWN},
+      {"LEFT", InputType::LEFT},
+      {"RIGHT", InputType::RIGHT},
+      {"A", InputType::A},
+      {"B", InputType::B},
+      {"SELECT", InputType::SELECT},
+      {"START", InputType::START},
+      {"L_TRIGGER", InputType::L_TRIGGER},
+      {"R_TRIGGER", InputType::R_TRIGGER},
+      {"ROTATE_CW", InputType::ROTATE_CW},
+      {"ROTATE_CCW", InputType::ROTATE_CCW},
+      {"TOUCH", InputType::TOUCH},
+  };
+
+  auto it = input_type_map.find(input_str);
+  if (it == input_type_map.end()) {
+    ESP_LOGW(TAG, "Unknown input type: %s", input_str);
+    return;
+  }
+
+  send_input(it->second, pressed, value);
 }
 
 void LvglGameRunner::send_input_event(const InputEvent &event) { input_handler_.push_event(event); }

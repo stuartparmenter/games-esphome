@@ -1,0 +1,220 @@
+# Example ESPHome configuration for ble_gamepad component
+# Demonstrates BLE gamepad integration for ESP32-S3 (Xbox controllers with BLE)
+
+esphome:
+  name: ble-gamepad-demo
+  platform: ESP32
+  board: esp32-s3-devkitc-1  # Or your ESP32-S3 board
+
+# Required: ESP-IDF framework for BLE support
+esp32:
+  framework:
+    type: esp-idf
+  variant: ESP32S3
+
+# External components
+external_components:
+  - source:
+      type: local
+      path: ../..  # Adjust path to your components directory
+    components: [ble_gamepad, lvgl_game_runner, game_snake]
+
+# BLE stack (auto-loaded by ble_gamepad)
+esp32_ble:
+  id: ble
+
+# Example LVGL display setup (adjust for your hardware)
+# lvgl:
+#   displays:
+#     - display_id: my_display
+#       pages:
+#         - id: game_page
+#           widgets:
+#             - canvas:
+#                 id: game_canvas
+#                 width: 240
+#                 height: 240
+
+# Game components (declare to register with game runner)
+game_snake:
+  id: snake
+
+# Game runner (comment out if not using)
+lvgl_game_runner:
+  id: game_runner
+  game: snake
+  # canvas: game_canvas  # Uncomment and link to your LVGL canvas
+  fps: 30
+
+# BLE gamepad component
+ble_gamepad:
+  id: gamepad
+  ble_id: ble  # Reference to esp32_ble component
+
+  # Automation triggers
+  on_connect:
+    then:
+      - logger.log: "Controller connected!"
+      - lvgl_game_runner.resume:
+          id: game_runner
+
+  on_disconnect:
+    then:
+      - logger.log: "Controller disconnected!"
+      - lvgl_game_runner.pause:
+          id: game_runner
+
+  on_button:
+    then:
+      # Forward button presses to game runner
+      # Trigger passes: input (string) and pressed (bool)
+      - lambda: |-
+          // Forward button event to game runner
+          id(game_runner).send_input(input.c_str(), pressed);
+
+          // Example: Start button toggles pause
+          if (input == "START" && pressed) {
+            id(game_runner).toggle();
+          }
+
+  on_stick:
+    then:
+      # Map analog sticks to directional inputs (with deadzone)
+      - lambda: |-
+          auto state = id(gamepad).get_state();
+          if (!state) return;
+
+          // Left stick to D-pad mapping with 50% threshold
+          constexpr int8_t THRESHOLD = 64;  // ~50% of max 127
+
+          // Horizontal mapping (X axis)
+          if (state->left_stick_x > THRESHOLD) {
+            // Moving right
+            id(game_runner).send_input("RIGHT", true);
+          } else if (state->left_stick_x < -THRESHOLD) {
+            // Moving left
+            id(game_runner).send_input("LEFT", true);
+          }
+
+          // Vertical mapping (Y axis)
+          if (state->left_stick_y > THRESHOLD) {
+            // Moving up
+            id(game_runner).send_input("UP", true);
+          } else if (state->left_stick_y < -THRESHOLD) {
+            // Moving down
+            id(game_runner).send_input("DOWN", true);
+          }
+
+# Optional: Home Assistant API integration
+api:
+  services:
+    # Example service to check controller status
+    - service: get_controller_state
+      then:
+        - logger.log:
+            format: "Controller connected: %s"
+            args: ["gamepad->is_connected() ? \"Yes\" : \"No\""]
+
+# WiFi for OTA updates and Home Assistant
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Logging
+logger:
+  level: DEBUG
+
+# OTA updates
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ============================================================
+# USAGE NOTES
+# ============================================================
+#
+# Supported Controllers (BLE mode only):
+# - Xbox Wireless Controller (model 1914+) with firmware v5.15 or later
+# - Xbox Series X|S controllers (all models)
+# - Xbox One controllers with BLE support (2016+ models)
+#
+# NOT Supported:
+# - PlayStation 5 DualSense (Bluetooth Classic only, not BLE)
+# - Nintendo Switch Pro Controller (Bluetooth Classic only)
+# - Older Xbox One controllers without BLE
+#
+# Important: ESP32-S3 Compatibility
+# - ESP32-S3 supports BLE ONLY (no Bluetooth Classic)
+# - Use original ESP32 for Bluetooth Classic controllers (PS5, Switch, etc.)
+# - This component targets ESP32-S3 for better performance
+#
+# Controller Firmware Update (if needed):
+# Xbox controllers may need firmware v5.15+ for BLE support:
+# 1. Connect controller to Windows PC via USB
+# 2. Open Xbox Accessories app
+# 3. Update firmware if available
+# 4. Controller will gain BLE support after update
+#
+# Pairing Instructions:
+# 1. Put Xbox controller in pairing mode:
+#    - Press and hold the pairing button on top of controller
+#    - Controller LED will start flashing rapidly
+# 2. ESP32-S3 will automatically discover and connect
+# 3. Connection is established when LED stops flashing
+# 4. No manual pairing steps required on ESP32 side
+#
+# Integration with Game Runner:
+# The on_button trigger passes button name and pressed state:
+#
+# on_button:
+#   then:
+#     - lambda: |-
+#         // input: std::string (button name: "UP", "A", "START", etc.)
+#         // pressed: bool (true = press, false = release)
+#         id(game_runner).send_input(input.c_str(), pressed);
+#
+# Button names mapped from Xbox controller:
+# - D-pad: "UP", "DOWN", "LEFT", "RIGHT"
+# - Face buttons: "A", "B", "X", "Y"
+# - Shoulders: "L1" (LB), "R1" (RB), "L3", "R3"
+# - System: "SELECT" (View), "START" (Menu), "HOME" (Xbox), "MISC" (Share)
+#
+# Analog stick mapping (use on_stick trigger):
+# The on_stick trigger fires when stick values change. Read state manually:
+#
+# on_stick:
+#   then:
+#     - lambda: |-
+#         auto state = id(gamepad).get_state();
+#         if (state->left_stick_x > 64) {  // 50% threshold
+#           id(game_runner).send_input("RIGHT", true);
+#         }
+#
+# API Access from Lambda:
+# - id(gamepad).is_connected() - Check connection status
+# - id(gamepad).get_state() - Get ControllerState pointer (nullptr if disconnected)
+# - state->buttons.button_south - Access button states (A button on Xbox)
+# - state->buttons.button_east - B button
+# - state->buttons.button_west - X button
+# - state->buttons.button_north - Y button
+# - state->left_stick_x - Access analog stick values (-127 to 127)
+# - state->left_trigger - Trigger values (0-255)
+#
+# Bluetooth Architecture:
+# - Uses BLE HID over GATT Profile (HOGP)
+# - Automatically scans for HID devices with UUID 0x1812
+# - Subscribes to HID Report characteristic for input
+# - Cannot be used with ESPHome's bluetooth_proxy (exclusive BLE stack access)
+#
+# Performance:
+# - Runs on ESP32-S3's BLE stack
+# - No external dependencies needed
+# - Input latency: ~15-30ms typical for BLE
+# - Scanning resumes automatically on disconnect
+#
+# Troubleshooting:
+# - If controller won't connect, update firmware to v5.15+
+# - Check logs for "Found HID device" messages during scan
+# - Some Xbox accessories (like headset adapters) may interfere
+# - ESP32-S3 must have sufficient power (USB 3.0 recommended)
+# ============================================================

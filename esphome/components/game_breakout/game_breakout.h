@@ -52,7 +52,8 @@ class GameBreakout : public GameBase {
   static constexpr int LIVES_MAX = 6;
   static constexpr int MAX_BALLS = 10;
   static constexpr int MAX_PROJECTILES = 8;
-  static constexpr int BRICK_COUNT = 48;  // 8 columns x 6 rows
+  static constexpr int SHOOTER_COOLDOWN_FRAMES = 15;  // ~0.5s at 30fps
+  static constexpr int BRICK_COUNT = 48;              // 8 columns x 6 rows
 
   // Brick types
   enum BrickType {
@@ -109,7 +110,9 @@ class GameBreakout : public GameBase {
 
   // Input state
   bool autoplay_;
-  int input_position_;  // Simulated knob position (0-50)
+  float input_position_;  // Simulated knob position (0-50, float for smooth movement)
+  bool left_held_;        // Track if left direction is held
+  bool right_held_;       // Track if right direction is held
 
   // Colors
   lv_color_t color_on_;
