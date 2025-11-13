@@ -2,9 +2,9 @@
 // Inspired by: https://github.com/richrd/esphome-clock-os/tree/main/clockos/packages/games/snake
 
 #include "game_snake.h"
-#include "esphome/core/log.h"
 #include <algorithm>
 #include <cstdlib>
+#include "esphome/core/log.h"
 
 namespace esphome::game_snake {
 
@@ -56,15 +56,29 @@ void GameSnake::reset() {
   direction_ = Direction::RIGHT;
   next_direction_ = Direction::RIGHT;
 
+  snake_tail_ = NULL_POSITION;
+  last_pickup_ = NULL_POSITION;
+
   state_.reset();
   update_timer_ = 0.0f;
+
+  initial_render_ = true;
 
   spawn_pickup_();
 }
 
 void GameSnake::on_input(const InputEvent &event) {
-  if (!event.pressed || state_.game_over)
+  if (!event.pressed)
     return;
+
+  if (event.type == InputType::START) {
+    // Restart game on START button
+    this->reset();
+    return;
+  }
+
+  if (state_.game_over)
+    return;  // Ignore inputs if game over
 
   // Map input to direction changes
   Direction new_dir = next_direction_;
@@ -121,11 +135,6 @@ void GameSnake::on_input(const InputEvent &event) {
           new_dir = Direction::UP;
           break;
       }
-      break;
-
-    case InputType::START:
-      // Restart game
-      reset();
       break;
 
     default:
@@ -225,6 +234,7 @@ void GameSnake::move_snake_() {
     }
   } else {
     // Remove tail if no pickup
+    snake_tail_ = snake_.back();
     snake_.pop_back();
   }
 }
@@ -345,20 +355,48 @@ void GameSnake::render_() {
   if (!canvas_)
     return;
 
-  // Clear canvas
-  lv_canvas_fill_bg(canvas_, color_bg_, LV_OPA_COVER);
+  if (initial_render_) {
+    // Clear canvas
+    lv_canvas_fill_bg(canvas_, color_bg_, LV_OPA_COVER);
 
-  // Draw border if walls enabled
-  if (walls_enabled_) {
-    draw_border_();
-  }
+    // Draw border if walls enabled
+    if (walls_enabled_) {
+      draw_border_();
+    }
 
-  // Draw pickup
-  draw_cell_(pickup_.x, pickup_.y, color_pickup_);
+    // Draw pickup
+    draw_cell_(pickup_.x, pickup_.y, color_pickup_);
 
-  // Draw snake
-  for (const auto &part : snake_) {
-    draw_cell_(part.x, part.y, color_snake_);
+    // Draw snake
+    for (const auto &part : snake_) {
+      draw_cell_(part.x, part.y, color_snake_);
+    }
+
+    initial_render_ = false;
+  } else {
+    // Clear Score area
+    fill_rect(2, 2, 100, 50, color_bg_);
+
+    if (last_pickup_ != pickup_) {
+      // Erase old pickup
+      if (last_pickup_ != NULL_POSITION) {
+        draw_cell_(last_pickup_.x, last_pickup_.y, color_bg_);
+      }
+      // Draw new pickup
+      draw_cell_(pickup_.x, pickup_.y, color_pickup_);
+      last_pickup_ = pickup_;
+    }
+
+    // Draw snake head
+    if (!snake_.empty()) {
+      const Position &head = snake_.front();
+      draw_cell_(head.x, head.y, color_snake_);
+    }
+    // Erase tail if moved
+    if (snake_tail_ != NULL_POSITION && (snake_tail_ != snake_.back())) {
+      draw_cell_(snake_tail_.x, snake_tail_.y, color_bg_);
+      snake_tail_ = snake_.back();
+    }
   }
 
   // Draw score

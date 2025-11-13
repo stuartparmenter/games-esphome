@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
 #include "esphome/components/lvgl_game_runner/game_base.h"
 #include "esphome/components/lvgl_game_runner/game_state.h"
-#include <vector>
-#include <cstdint>
 
 namespace esphome::game_snake {
 
@@ -42,13 +42,19 @@ class GameSnake : public GameBase {
     bool operator==(const Position &other) const { return x == other.x && y == other.y; }
   };
 
+  static constexpr Position NULL_POSITION = {-1, -1};
+
   enum class Direction { UP, DOWN, LEFT, RIGHT };
 
   std::vector<Position> snake_;
+  Position snake_tail_{NULL_POSITION};
   Position pickup_;
+  Position last_pickup_{NULL_POSITION};
+
   Direction direction_{Direction::RIGHT};
   Direction next_direction_{Direction::RIGHT};
   GameState state_;
+  bool initial_render_{true};
 
   // Timing
   float update_timer_{0.0f};
