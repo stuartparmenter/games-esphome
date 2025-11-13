@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
-#include "esphome/core/automation.h"
 #include "esphome/core/version.h"
 
 #include <memory>
@@ -35,7 +35,7 @@ class LvglGameRunner : public Component {
   float get_setup_priority() const override { return setup_priority::BEFORE_CONNECTION; }
 
   // Codegen wiring
-  void setup_binding(lv_obj_t *canvas_obj, const std::string &game_key, int x, int y, int w, int h, bool start_paused);
+  void setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game, int x, int y, int w, int h, bool start_paused);
 
   // Runtime control
   void start();  // Start/restart current game
@@ -52,7 +52,7 @@ class LvglGameRunner : public Component {
   // Per-instance timing
   void set_initial_period(uint32_t ms) { period_ms_ = ms; }
   void set_fps(float fps);
-  void set_game(const std::string &key);
+  void set_game(GameBase *game);
 
  protected:
   struct Area {
@@ -102,103 +102,57 @@ class LvglGameRunner : public Component {
 };
 
 // -------- Automation actions (per-instance) --------
-class StartAction : public Action<> {
+class StartAction : public Action<>, public Parented<LvglGameRunner> {
  public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-  void play() override {
-    if (t_)
-      t_->start();
-  }
+  void play() override { this->parent_->start(); }
+};
 
- private:
+class PauseAction : public Action<>, public Parented<LvglGameRunner> {
+ public:
+  void play() override { this->parent_->pause(); }
+};
+
+class ResumeAction : public Action<>, public Parented<LvglGameRunner> {
+ public:
+  void play() override { this->parent_->resume(); }
   LvglGameRunner *t_{nullptr};
 };
 
-class PauseAction : public Action<> {
+class ToggleAction : public Action<>, public Parented<LvglGameRunner> {
  public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-  void play() override {
-    if (t_)
-      t_->pause();
-  }
-
- private:
-  LvglGameRunner *t_{nullptr};
+  void play() override { this->parent_->toggle(); }
 };
 
-class ResumeAction : public Action<> {
+template<typename... Ts> class SetFpsAction : public Action<Ts...>, public Parented<LvglGameRunner> {
  public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-  void play() override {
-    if (t_)
-      t_->resume();
-  }
-
- private:
-  LvglGameRunner *t_{nullptr};
+  TEMPLATABLE_VALUE(float, fps);
+  void play(const Ts &...x) override { this->parent_->set_fps(this->fps_.value(x...)); }
 };
 
-class ToggleAction : public Action<> {
+template<typename... Ts> class SetGameAction : public Action<Ts...>, public Parented<LvglGameRunner> {
  public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-  void play() override {
-    if (t_)
-      t_->toggle();
-  }
-
- private:
-  LvglGameRunner *t_{nullptr};
-};
-
-class SetFpsAction : public Action<> {
- public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-  void set_fps(float f) { fps_ = f; }
-  void play() override {
-    if (t_)
-      t_->set_fps(fps_);
-  }
-
- private:
-  LvglGameRunner *t_{nullptr};
-  float fps_{30.0f};
-};
-
-template<typename... Ts> class SetGameAction : public Action<Ts...> {
- public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-
-  TEMPLATABLE_VALUE(std::string, game)
+  TEMPLATABLE_VALUE(GameBase *, game);
 
 #if ESPHOME_VERSION_CODE >= VERSION_CODE(2025, 11, 0)
-  void play(const Ts&... x) override {
+  void play(const Ts &...x) override {
 #else
   void play(Ts... x) override {
 #endif
-    if (!t_)
-      return;
-    const std::string key = this->game_.value(x...);
-    if (!key.empty())
-      t_->set_game(key);
+    GameBase *game = this->game_.value(x...);
+    if (game != nullptr)
+      this->parent_->set_game(game);
   }
-
- private:
-  LvglGameRunner *t_{nullptr};
 };
 
-template<typename... Ts> class SendInputAction : public Action<Ts...> {
+template<typename... Ts> class SendInputAction : public Action<Ts...>, public Parented<LvglGameRunner> {
  public:
-  void set_target(LvglGameRunner *t) { t_ = t; }
-
-  TEMPLATABLE_VALUE(std::string, input_type)
+  TEMPLATABLE_VALUE(std::string, input_type);
 
 #if ESPHOME_VERSION_CODE >= VERSION_CODE(2025, 11, 0)
-  void play(const Ts&... x) override {
+  void play(const Ts &...x) override {
 #else
   void play(Ts... x) override {
 #endif
-    if (!t_)
-      return;
     const std::string input_str = this->input_type_.value(x...);
     if (input_str.empty())
       return;
@@ -236,11 +190,8 @@ template<typename... Ts> class SendInputAction : public Action<Ts...> {
       return;
     }
 
-    t_->send_input(type);
+    this->parent_->send_input(type);
   }
-
- private:
-  LvglGameRunner *t_{nullptr};
 };
 
 }  // namespace esphome::lvgl_game_runner

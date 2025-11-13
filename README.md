@@ -52,14 +52,13 @@ Component-based architecture inspired by ESPHome's light effects pattern:
 - **LvglGameRunner**: Main component managing timing, input, and lifecycle
 - **InputHandler**: Thread-safe input queue with semaphore protection
 - **Separate Game Components**: Each game is an independent ESPHome component (e.g., `game_snake`, `game_breakout`)
-- **Decorator Pattern**: Games use `@register_game()` decorator (similar to `@register_addressable_effect()`)
 
 ## Directory Structure
 
 ```
 esphome/components/
 ├── lvgl_game_runner/               # Core game runner component
-│   ├── __init__.py                 # ESPHome integration & register_game() decorator
+│   ├── __init__.py                 # ESPHome component config & codegen
 │   ├── lvgl_game_runner.h / .cpp   # Main component
 │   ├── game_base.h                 # Base class interface
 │   ├── game_registry.h             # Registry pattern
@@ -68,17 +67,17 @@ esphome/components/
 │   └── game_state.h                # Score/lives utilities
 │
 ├── game_snake/                     # Snake game component
-│   ├── __init__.py                 # Component registration using @register_game()
+│   ├── __init__.py                 # ESPHome component config & codegen
 │   ├── game_snake.h / .cpp         # Snake game implementation
 │   └── (future: custom config)
 │
 ├── game_breakout/                  # Breakout game component
-│   ├── __init__.py                 # Component registration using @register_game()
+│   ├── __init__.py                 # ESPHome component config & codegen
 │   ├── game_breakout.h / .cpp      # Breakout game implementation
 │   └── (future: custom config)
 │
 └── game_pong/                      # Pong game component
-    ├── __init__.py                 # Component registration using @register_game()
+    ├── __init__.py                 # ESPHome component config & codegen
     ├── game_pong.h / .cpp          # Pong game implementation
     └── (future: custom config)
 ```
@@ -215,10 +214,9 @@ CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(GameYourName),
 })
 
-@lvgl_game_runner.register_game("yourname")
-async def to_code(config, var):
+async def to_code(config):
     """Game initialization - add custom config here if needed."""
-    pass
+    var = cg.new_Pvariable(config[CONF_ID])
 ```
 
 ### 4. Use in YAML
@@ -234,9 +232,9 @@ game_yourname:
   id: my_custom_game
 
 lvgl_game_runner:
-  - id: runner
-    game: yourname
-    canvas: game_canvas
+  id: runner
+  initial_game: my_custom_game
+  canvas: game_canvas
 ```
 
 See [example.yaml](example.yaml) and existing games for complete examples.
@@ -250,14 +248,14 @@ Target performance on ESP32:
 
 ## Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `game` | string | required | Game name ("snake", "breakout") |
-| `canvas` | id | required | LVGL canvas widget ID |
-| `fps` | float | 30.0 | Target frame rate (1-240) |
-| `x`, `y` | int | 0 | Sub-region offset |
-| `width`, `height` | int | 0 | Sub-region size (0=full canvas) |
-| `start_paused` | bool | false | Start in paused state |
+| Option            | Type   | Default  | Description                     |
+| ----------------- | ------ | -------- | ------------------------------- |
+| `game`            | string | required | Game name ("snake", "breakout") |
+| `canvas`          | id     | required | LVGL canvas widget ID           |
+| `fps`             | float  | 30.0     | Target frame rate (1-240)       |
+| `x`, `y`          | int    | 0        | Sub-region offset               |
+| `width`, `height` | int    | 0        | Sub-region size (0=full canvas) |
+| `start_paused`    | bool   | false    | Start in paused state           |
 
 ## Examples
 
