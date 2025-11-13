@@ -4,6 +4,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
+
 from esphome.components import lvgl_game_runner
 
 DEPENDENCIES = ["lvgl_game_runner"]
@@ -18,7 +19,6 @@ CONFIG_SCHEMA = cv.Schema(
 )
 
 
-@lvgl_game_runner.register_game("breakout")
-async def to_code(config, var):
+async def to_code(config):
     """Breakout game initialization - currently no custom config needed."""
-    pass
+    cg.new_Pvariable(config[CONF_ID])

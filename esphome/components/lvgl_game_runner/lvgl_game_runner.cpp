@@ -3,10 +3,10 @@
 
 #include "lvgl_game_runner.h"
 
-#include "esp_timer.h"
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include "esp_timer.h"
 
 namespace esphome::lvgl_game_runner {
 
@@ -76,16 +76,15 @@ void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t val
 
 void LvglGameRunner::send_input_event(const InputEvent &event) { input_handler_.push_event(event); }
 
-void LvglGameRunner::setup_binding(lv_obj_t *canvas_obj, const std::string &game_key, int x, int y, int w, int h,
+void LvglGameRunner::setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game, int x, int y, int w, int h,
                                    bool start_paused) {
   canvas_ = canvas_obj;
-  game_key_ = game_key;
+  game_ = initial_game;
   area_.x = x;
   area_.y = y;
   area_.w = w;
   area_.h = h;
   running_ = !start_paused;
-  rebind_ = running_;
 }
 
 void LvglGameRunner::setup() {
@@ -121,14 +120,13 @@ void LvglGameRunner::loop() {
   }
 }
 
-void LvglGameRunner::set_game(const std::string &key) {
-  if (key == game_key_)
+void LvglGameRunner::set_game(GameBase *game) {
+  if (game == game_)
     return;
-  game_key_ = key;
-  game_ = nullptr;         // clear old instance reference
+  game_ = game;
   rebind_ = true;          // ensure ensure_bound_() runs next update
   input_handler_.clear();  // clear any pending input
-  ESP_LOGI(TAG, "Game changed to '%s'; will rebind", game_key_.c_str());
+  ESP_LOGI(TAG, "Game changed; will rebind");
 }
 
 bool LvglGameRunner::read_canvas_size_(uint16_t &w, uint16_t &h) {
@@ -162,14 +160,12 @@ bool LvglGameRunner::ensure_bound_() {
   }
 
   if (!game_) {
-    game_ = GameRegistry::make(game_key_);
-    if (!game_) {
-      ESP_LOGE(TAG, "Game '%s' not found", game_key_.c_str());
-      return false;
-    }
+    // Show game menu?
+  } else {
     game_->on_bind(canvas_);
     game_->reset();  // Initialize game state
   }
+
   this->on_canvas_size_change_();
   return true;
 }
