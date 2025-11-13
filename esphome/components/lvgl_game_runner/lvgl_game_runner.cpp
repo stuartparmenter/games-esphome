@@ -85,6 +85,7 @@ void LvglGameRunner::setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game,
   area_.w = w;
   area_.h = h;
   running_ = !start_paused;
+  rebind_ = running_;
 }
 
 void LvglGameRunner::setup() {
