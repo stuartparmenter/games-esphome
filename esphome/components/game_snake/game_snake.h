@@ -55,6 +55,8 @@ class GameSnake : public GameBase {
   Direction next_direction_{Direction::RIGHT};
   GameState state_;
   bool initial_render_{true};
+  bool needs_render_{true};
+  uint32_t last_drawn_score_{0};
 
   // Timing
   float update_timer_{0.0f};

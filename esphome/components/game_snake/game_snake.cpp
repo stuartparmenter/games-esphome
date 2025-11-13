@@ -63,6 +63,8 @@ void GameSnake::reset() {
   update_timer_ = 0.0f;
 
   initial_render_ = true;
+  needs_render_ = true;
+  last_drawn_score_ = 0;
 
   spawn_pickup_();
 }
@@ -163,12 +165,15 @@ void GameSnake::step(float dt) {
       direction_ = get_autoplay_direction_();
     }
 
-    // Move snake
+    // Move snake (this will set needs_render_ flag)
     move_snake_();
   }
 
-  // Render
-  render_();
+  // Only render when something has changed
+  if (needs_render_) {
+    render_();
+    needs_render_ = false;
+  }
 }
 
 void GameSnake::move_snake_() {
@@ -197,6 +202,7 @@ void GameSnake::move_snake_() {
   if (walls_enabled_) {
     if (new_head.x < 0 || new_head.x >= GRID_COLS || new_head.y < 0 || new_head.y >= GRID_ROWS) {
       state_.game_over = true;
+      needs_render_ = true;
       ESP_LOGI(TAG, "Game Over! Hit wall. Final score: %u", state_.score);
       return;
     }
@@ -215,6 +221,7 @@ void GameSnake::move_snake_() {
   // Check self collision
   if (check_self_collision_(new_head)) {
     state_.game_over = true;
+    needs_render_ = true;
     ESP_LOGI(TAG, "Game Over! Hit self. Final score: %u", state_.score);
     return;
   }
@@ -226,6 +233,7 @@ void GameSnake::move_snake_() {
   if (new_head == pickup_) {
     state_.add_score(10);
     spawn_pickup_();
+    needs_render_ = true;
     ESP_LOGD(TAG, "Pickup collected! Score: %u", state_.score);
 
     // Speed up slightly
@@ -237,6 +245,9 @@ void GameSnake::move_snake_() {
     snake_tail_ = snake_.back();
     snake_.pop_back();
   }
+
+  // Mark that we need to render the snake movement
+  needs_render_ = true;
 }
 
 void GameSnake::spawn_pickup_() {
@@ -372,11 +383,12 @@ void GameSnake::render_() {
       draw_cell_(part.x, part.y, color_snake_);
     }
 
-    initial_render_ = false;
-  } else {
-    // Clear Score area
-    fill_rect(2, 2, 100, 50, color_bg_);
+    // Draw initial score
+    draw_score_();
 
+    initial_render_ = false;
+    last_drawn_score_ = state_.score;
+  } else {
     if (last_pickup_ != pickup_) {
       // Erase old pickup
       if (last_pickup_ != NULL_POSITION) {
@@ -399,8 +411,13 @@ void GameSnake::render_() {
     }
   }
 
-  // Draw score
-  draw_score_();
+  // Only draw score when it changes or during game over
+  if (state_.score != last_drawn_score_ || state_.game_over) {
+    // Clear Score area only when redrawing
+    fill_rect(2, 2, 100, 50, color_bg_);
+    draw_score_();
+    last_drawn_score_ = state_.score;
+  }
 
   // Invalidate canvas to trigger redraw
   lv_obj_invalidate(canvas_);
