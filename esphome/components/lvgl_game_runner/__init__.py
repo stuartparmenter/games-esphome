@@ -5,12 +5,8 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import (
-    CONF_HEIGHT,
     CONF_ID,
     CONF_INPUT,
-    CONF_WIDTH,
-    CONF_X,
-    CONF_Y,
 )
 
 from esphome import automation
@@ -59,10 +55,6 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_CANVAS): cv.use_id(lvgl.Widget),
         cv.Optional(CONF_INITIAL_GAME): cv.use_id(GameBase),
         cv.Optional(CONF_FPS, default=30.0): cv.float_range(min=1.0, max=240.0),
-        cv.Optional(CONF_X, default=0): cv.int_range(min=0),
-        cv.Optional(CONF_Y, default=0): cv.int_range(min=0),
-        cv.Optional(CONF_WIDTH, default=0): cv.int_range(min=0),
-        cv.Optional(CONF_HEIGHT, default=0): cv.int_range(min=0),
         cv.Optional(CONF_START_PAUSED, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
@@ -84,10 +76,6 @@ async def to_code(config):
         var.setup_binding(
             canvas_widget,
             initial_game_var if initial_game else None,
-            config[CONF_X],
-            config[CONF_Y],
-            config[CONF_WIDTH],
-            config[CONF_HEIGHT],
             config[CONF_START_PAUSED],
         )
     )

@@ -27,12 +27,9 @@ void GameSnake::on_resize(const Rect &r) {
   GameBase::on_resize(r);
 
   // Calculate cell size based on canvas dimensions
-  int canvas_w, canvas_h;
-  get_canvas_size(canvas_w, canvas_h);
-
-  if (canvas_w > 0 && canvas_h > 0) {
-    cell_width_ = canvas_w / GRID_COLS;
-    cell_height_ = canvas_h / GRID_ROWS;
+  if (area_.w > 0 && area_.h > 0) {
+    cell_width_ = area_.w / GRID_COLS;
+    cell_height_ = area_.h / GRID_ROWS;
 
     // Ensure at least 1 pixel per cell
     if (cell_width_ < 1)
@@ -167,12 +164,12 @@ void GameSnake::step(float dt) {
 
     // Move snake (this will set needs_render_ flag)
     move_snake_();
-  }
 
-  // Only render when something has changed
-  if (needs_render_) {
-    render_();
-    needs_render_ = false;
+    // Render all changes in one call
+    if (needs_render_) {
+      render_();
+      needs_render_ = false;
+    }
   }
 }
 
@@ -236,6 +233,10 @@ void GameSnake::move_snake_() {
     needs_render_ = true;
     ESP_LOGD(TAG, "Pickup collected! Score: %u", state_.score);
 
+    // When we eat a pickup, we don't remove the tail
+    // Set snake_tail_ to NULL to indicate no tail to erase
+    snake_tail_ = NULL_POSITION;
+
     // Speed up slightly
     if (update_interval_ > 0.05f) {
       update_interval_ *= 0.95f;
@@ -251,13 +252,40 @@ void GameSnake::move_snake_() {
 }
 
 void GameSnake::spawn_pickup_() {
-  // Find empty position for pickup
-  const int max_attempts = 100;
+  // Optimized: use modulo to limit attempts based on grid fill ratio
+  // With 25x11 = 275 cells, once snake is >100, we try fewer random attempts
+  const int total_cells = GRID_COLS * GRID_ROWS;
+  const int empty_cells = total_cells - static_cast<int>(snake_.size());
+
+  // If grid is nearly full, fall back to first empty cell search
+  if (empty_cells < 10) {
+    for (int y = 0; y < GRID_ROWS; y++) {
+      for (int x = 0; x < GRID_COLS; x++) {
+        Position pos = {x, y};
+        bool occupied = false;
+        for (const auto &part : snake_) {
+          if (part == pos) {
+            occupied = true;
+            break;
+          }
+        }
+        if (!occupied) {
+          pickup_ = pos;
+          return;
+        }
+      }
+    }
+    pickup_ = {0, 0};  // Grid full
+    return;
+  }
+
+  // Random placement with limited attempts
+  const int max_attempts = 20;  // Reduced from 100
   for (int i = 0; i < max_attempts; i++) {
     pickup_.x = rand() % GRID_COLS;
     pickup_.y = rand() % GRID_ROWS;
 
-    // Check if position is occupied by snake
+    // Quick check if position is occupied
     bool occupied = false;
     for (const auto &part : snake_) {
       if (part == pickup_) {
@@ -270,8 +298,23 @@ void GameSnake::spawn_pickup_() {
       return;
   }
 
-  // Fallback: place at 0,0 (should rarely happen)
-  pickup_ = {0, 0};
+  // Fallback: find first empty cell
+  for (int y = 0; y < GRID_ROWS; y++) {
+    for (int x = 0; x < GRID_COLS; x++) {
+      Position pos = {x, y};
+      bool occupied = false;
+      for (const auto &part : snake_) {
+        if (part == pos) {
+          occupied = true;
+          break;
+        }
+      }
+      if (!occupied) {
+        pickup_ = pos;
+        return;
+      }
+    }
+  }
 }
 
 bool GameSnake::check_collision_(const Position &pos) {
@@ -375,7 +418,7 @@ void GameSnake::render_() {
       draw_border_();
     }
 
-    // Draw pickup
+    // Draw pickup (use slow path for initial render, it's fine)
     draw_cell_(pickup_.x, pickup_.y, color_pickup_);
 
     // Draw snake
@@ -388,44 +431,42 @@ void GameSnake::render_() {
 
     initial_render_ = false;
     last_drawn_score_ = state_.score;
+    last_pickup_ = pickup_;
+
+    // Full invalidation for initial render
+    lv_obj_invalidate(canvas_);
   } else {
+    // Fast incremental update using direct buffer manipulation
+
+    // Draw new snake head
+    if (!snake_.empty()) {
+      const Position &head = snake_.front();
+      draw_cell_fast_(head.x, head.y, color_snake_);
+    }
+
+    // Erase tail if it was removed
+    if (snake_tail_ != NULL_POSITION) {
+      draw_cell_fast_(snake_tail_.x, snake_tail_.y, color_bg_);
+    }
+
+    // Redraw pickup if it moved (no need to erase old - snake head is there)
     if (last_pickup_ != pickup_) {
-      // Erase old pickup
-      if (last_pickup_ != NULL_POSITION) {
-        draw_cell_(last_pickup_.x, last_pickup_.y, color_bg_);
-      }
-      // Draw new pickup
-      draw_cell_(pickup_.x, pickup_.y, color_pickup_);
+      draw_cell_fast_(pickup_.x, pickup_.y, color_pickup_);
       last_pickup_ = pickup_;
     }
 
-    // Draw snake head
-    if (!snake_.empty()) {
-      const Position &head = snake_.front();
-      draw_cell_(head.x, head.y, color_snake_);
-    }
-    // Erase tail if moved
-    if (snake_tail_ != NULL_POSITION && (snake_tail_ != snake_.back())) {
-      draw_cell_(snake_tail_.x, snake_tail_.y, color_bg_);
-      snake_tail_ = snake_.back();
+    // Redraw score if it changed or game over
+    if (state_.score != last_drawn_score_ || state_.game_over) {
+      clear_score_area_fast_();  // Clears and invalidates
+      draw_score_();              // Draws text on top (already invalidated)
+      last_drawn_score_ = state_.score;
     }
   }
-
-  // Only draw score when it changes or during game over
-  if (state_.score != last_drawn_score_ || state_.game_over) {
-    // Clear Score area only when redrawing
-    fill_rect(2, 2, 100, 50, color_bg_);
-    draw_score_();
-    last_drawn_score_ = state_.score;
-  }
-
-  // Invalidate canvas to trigger redraw
-  lv_obj_invalidate(canvas_);
 }
 
 void GameSnake::draw_cell_(int gx, int gy, lv_color_t color) {
-  const int px = area_.x + gx * cell_width_;
-  const int py = area_.y + gy * cell_height_;
+  const int px = gx * cell_width_;
+  const int py = gy * cell_height_;
 
   lv_draw_rect_dsc_t rect_dsc;
   lv_draw_rect_dsc_init(&rect_dsc);
@@ -436,10 +477,19 @@ void GameSnake::draw_cell_(int gx, int gy, lv_color_t color) {
   lv_canvas_draw_rect(canvas_, px, py, cell_width_, cell_height_, &rect_dsc);
 }
 
-void GameSnake::draw_border_() {
-  int canvas_w, canvas_h;
-  get_canvas_size(canvas_w, canvas_h);
+void GameSnake::draw_cell_fast_(int gx, int gy, lv_color_t color) {
+  const int px = gx * cell_width_;
+  const int py = gy * cell_height_;
+  fill_rect_fast(px, py, cell_width_, cell_height_, color);  // Also invalidates
+}
 
+void GameSnake::clear_score_area_fast_() {
+  // Clear only a small area for the score text (80x14 instead of 100x50)
+  // This reduces from 5000 to ~1120 pixels
+  fill_rect_fast(2, 2, 80, 14, color_bg_);
+}
+
+void GameSnake::draw_border_() {
   lv_draw_rect_dsc_t rect_dsc;
   lv_draw_rect_dsc_init(&rect_dsc);
   rect_dsc.bg_opa = LV_OPA_TRANSP;
@@ -447,7 +497,7 @@ void GameSnake::draw_border_() {
   rect_dsc.border_width = 1;
   rect_dsc.border_opa = LV_OPA_COVER;
 
-  lv_canvas_draw_rect(canvas_, 0, 0, canvas_w, canvas_h, &rect_dsc);
+  lv_canvas_draw_rect(canvas_, 0, 0, area_.w, area_.h, &rect_dsc);
 }
 
 void GameSnake::draw_score_() {

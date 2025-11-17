@@ -70,4 +70,45 @@ void GameBase::draw_text(int x, int y, const char *text, lv_color_t color, lv_te
   lv_canvas_draw_text(canvas_, x, y, area_.w, &label_dsc, text);
 }
 
+void GameBase::fill_rect_fast(int x, int y, int w, int h, lv_color_t color) {
+  lv_color_t *buf = get_canvas_buffer();
+  if (!buf)
+    return;
+
+  // Coordinates are relative to game area
+  // Fill the rectangle directly in the buffer
+  for (int dy = 0; dy < h; dy++) {
+    const int py = y + dy;
+    if (py < 0 || py >= area_.h)
+      continue;
+
+    // Calculate row offset using area width for stride
+    lv_color_t *row = &buf[py * area_.w];
+
+    for (int dx = 0; dx < w; dx++) {
+      const int px = x + dx;
+      if (px >= 0 && px < area_.w) {
+        row[px] = color;
+      }
+    }
+  }
+
+  // Automatically invalidate the drawn area
+  invalidate_area_rect(x, y, w, h);
+}
+
+void GameBase::invalidate_area_rect(int x, int y, int w, int h) {
+  if (!canvas_)
+    return;
+
+  // Convert relative coordinates to absolute canvas coordinates
+  lv_area_t area;
+  area.x1 = area_.x + x;
+  area.y1 = area_.y + y;
+  area.x2 = area_.x + x + w;
+  area.y2 = area_.y + y + h;
+
+  lv_obj_invalidate_area(canvas_, &area);
+}
+
 }  // namespace esphome::lvgl_game_runner

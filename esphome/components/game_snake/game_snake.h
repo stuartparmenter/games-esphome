@@ -84,6 +84,8 @@ class GameSnake : public GameBase {
   // Rendering
   void render_();
   void draw_cell_(int gx, int gy, lv_color_t color);
+  void draw_cell_fast_(int gx, int gy, lv_color_t color);
+  void clear_score_area_fast_();
   void draw_border_();
   void draw_score_();
 };
