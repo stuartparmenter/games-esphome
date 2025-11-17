@@ -31,9 +31,12 @@ class GameSnake : public GameBase {
   void reset() override;
 
  private:
-  // Grid configuration
-  static constexpr int GRID_COLS = 25;
-  static constexpr int GRID_ROWS = 11;
+  // Grid configuration (dynamically calculated in on_resize)
+  static constexpr int MIN_GRID_CELLS = 12;  // Ideal size for smallest dimension
+  int grid_cols_{0};
+  int grid_rows_{0};
+  int grid_offset_x_{0};  // Centering offset if pixels don't divide evenly
+  int grid_offset_y_{0};
 
   // Game state
   struct Position {

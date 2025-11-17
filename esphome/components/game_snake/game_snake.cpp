@@ -26,18 +26,31 @@ void GameSnake::on_bind(lv_obj_t *canvas) {
 void GameSnake::on_resize(const Rect &r) {
   GameBase::on_resize(r);
 
-  // Calculate cell size based on canvas dimensions
+  // Calculate grid dynamically based on canvas size
   if (area_.w > 0 && area_.h > 0) {
-    cell_width_ = area_.w / GRID_COLS;
-    cell_height_ = area_.h / GRID_ROWS;
+    // Calculate cell size based on smallest dimension / MIN_GRID_CELLS
+    // This ensures cells are perfectly square
+    int min_dimension = (area_.w < area_.h) ? area_.w : area_.h;
+    int cell_size = min_dimension / MIN_GRID_CELLS;
 
     // Ensure at least 1 pixel per cell
-    if (cell_width_ < 1)
-      cell_width_ = 1;
-    if (cell_height_ < 1)
-      cell_height_ = 1;
+    if (cell_size < 1)
+      cell_size = 1;
 
-    ESP_LOGI(TAG, "Snake grid: %dx%d, cell size: %dx%d", GRID_COLS, GRID_ROWS, cell_width_, cell_height_);
+    // Both width and height are the same (square cells)
+    cell_width_ = cell_size;
+    cell_height_ = cell_size;
+
+    // Calculate how many cells fit in each dimension
+    grid_cols_ = area_.w / cell_size;
+    grid_rows_ = area_.h / cell_size;
+
+    // Calculate centering offset for any remaining pixels
+    grid_offset_x_ = (area_.w - (grid_cols_ * cell_size)) / 2;
+    grid_offset_y_ = (area_.h - (grid_rows_ * cell_size)) / 2;
+
+    ESP_LOGI(TAG, "Snake grid: %dx%d cells, cell size: %dx%d px, offset: (%d,%d)", grid_cols_, grid_rows_,
+             cell_width_, cell_height_, grid_offset_x_, grid_offset_y_);
   }
 }
 
@@ -46,9 +59,9 @@ void GameSnake::reset() {
 
   // Initialize snake in the center
   snake_.clear();
-  snake_.push_back({GRID_COLS / 2, GRID_ROWS / 2});
-  snake_.push_back({GRID_COLS / 2 - 1, GRID_ROWS / 2});
-  snake_.push_back({GRID_COLS / 2 - 2, GRID_ROWS / 2});
+  snake_.push_back({grid_cols_ / 2, grid_rows_ / 2});
+  snake_.push_back({grid_cols_ / 2 - 1, grid_rows_ / 2});
+  snake_.push_back({grid_cols_ / 2 - 2, grid_rows_ / 2});
 
   direction_ = Direction::RIGHT;
   next_direction_ = Direction::RIGHT;
@@ -197,7 +210,7 @@ void GameSnake::move_snake_() {
 
   // Check wall collision
   if (walls_enabled_) {
-    if (new_head.x < 0 || new_head.x >= GRID_COLS || new_head.y < 0 || new_head.y >= GRID_ROWS) {
+    if (new_head.x < 0 || new_head.x >= grid_cols_ || new_head.y < 0 || new_head.y >= grid_rows_) {
       state_.game_over = true;
       needs_render_ = true;
       ESP_LOGI(TAG, "Game Over! Hit wall. Final score: %u", state_.score);
@@ -206,12 +219,12 @@ void GameSnake::move_snake_() {
   } else {
     // Wrap around
     if (new_head.x < 0)
-      new_head.x = GRID_COLS - 1;
-    if (new_head.x >= GRID_COLS)
+      new_head.x = grid_cols_ - 1;
+    if (new_head.x >= grid_cols_)
       new_head.x = 0;
     if (new_head.y < 0)
-      new_head.y = GRID_ROWS - 1;
-    if (new_head.y >= GRID_ROWS)
+      new_head.y = grid_rows_ - 1;
+    if (new_head.y >= grid_rows_)
       new_head.y = 0;
   }
 
@@ -253,14 +266,13 @@ void GameSnake::move_snake_() {
 
 void GameSnake::spawn_pickup_() {
   // Optimized: use modulo to limit attempts based on grid fill ratio
-  // With 25x11 = 275 cells, once snake is >100, we try fewer random attempts
-  const int total_cells = GRID_COLS * GRID_ROWS;
+  const int total_cells = grid_cols_ * grid_rows_;
   const int empty_cells = total_cells - static_cast<int>(snake_.size());
 
   // If grid is nearly full, fall back to first empty cell search
   if (empty_cells < 10) {
-    for (int y = 0; y < GRID_ROWS; y++) {
-      for (int x = 0; x < GRID_COLS; x++) {
+    for (int y = 0; y < grid_rows_; y++) {
+      for (int x = 0; x < grid_cols_; x++) {
         Position pos = {x, y};
         bool occupied = false;
         for (const auto &part : snake_) {
@@ -282,8 +294,8 @@ void GameSnake::spawn_pickup_() {
   // Random placement with limited attempts
   const int max_attempts = 20;  // Reduced from 100
   for (int i = 0; i < max_attempts; i++) {
-    pickup_.x = rand() % GRID_COLS;
-    pickup_.y = rand() % GRID_ROWS;
+    pickup_.x = rand() % grid_cols_;
+    pickup_.y = rand() % grid_rows_;
 
     // Quick check if position is occupied
     bool occupied = false;
@@ -299,8 +311,8 @@ void GameSnake::spawn_pickup_() {
   }
 
   // Fallback: find first empty cell
-  for (int y = 0; y < GRID_ROWS; y++) {
-    for (int x = 0; x < GRID_COLS; x++) {
+  for (int y = 0; y < grid_rows_; y++) {
+    for (int x = 0; x < grid_cols_; x++) {
       Position pos = {x, y};
       bool occupied = false;
       for (const auto &part : snake_) {
@@ -319,7 +331,7 @@ void GameSnake::spawn_pickup_() {
 
 bool GameSnake::check_collision_(const Position &pos) {
   if (walls_enabled_) {
-    if (pos.x < 0 || pos.x >= GRID_COLS || pos.y < 0 || pos.y >= GRID_ROWS)
+    if (pos.x < 0 || pos.x >= grid_cols_ || pos.y < 0 || pos.y >= grid_rows_)
       return true;
   }
   return check_self_collision_(pos);
@@ -388,12 +400,12 @@ GameSnake::Direction GameSnake::get_autoplay_direction_() {
     // Wrap if needed
     if (!walls_enabled_) {
       if (test_pos.x < 0)
-        test_pos.x = GRID_COLS - 1;
-      if (test_pos.x >= GRID_COLS)
+        test_pos.x = grid_cols_ - 1;
+      if (test_pos.x >= grid_cols_)
         test_pos.x = 0;
       if (test_pos.y < 0)
-        test_pos.y = GRID_ROWS - 1;
-      if (test_pos.y >= GRID_ROWS)
+        test_pos.y = grid_rows_ - 1;
+      if (test_pos.y >= grid_rows_)
         test_pos.y = 0;
     }
 
@@ -465,8 +477,8 @@ void GameSnake::render_() {
 }
 
 void GameSnake::draw_cell_(int gx, int gy, lv_color_t color) {
-  const int px = gx * cell_width_;
-  const int py = gy * cell_height_;
+  const int px = grid_offset_x_ + gx * cell_width_;
+  const int py = grid_offset_y_ + gy * cell_height_;
 
   lv_draw_rect_dsc_t rect_dsc;
   lv_draw_rect_dsc_init(&rect_dsc);
@@ -478,8 +490,8 @@ void GameSnake::draw_cell_(int gx, int gy, lv_color_t color) {
 }
 
 void GameSnake::draw_cell_fast_(int gx, int gy, lv_color_t color) {
-  const int px = gx * cell_width_;
-  const int py = gy * cell_height_;
+  const int px = grid_offset_x_ + gx * cell_width_;
+  const int py = grid_offset_y_ + gy * cell_height_;
   fill_rect_fast(px, py, cell_width_, cell_height_, color);  // Also invalidates
 }
 
@@ -497,7 +509,11 @@ void GameSnake::draw_border_() {
   rect_dsc.border_width = 1;
   rect_dsc.border_opa = LV_OPA_COVER;
 
-  lv_canvas_draw_rect(canvas_, 0, 0, area_.w, area_.h, &rect_dsc);
+  // Draw border 1 pixel outside the actual game grid
+  const int grid_pixel_width = grid_cols_ * cell_width_;
+  const int grid_pixel_height = grid_rows_ * cell_height_;
+  lv_canvas_draw_rect(canvas_, grid_offset_x_ - 1, grid_offset_y_ - 1, grid_pixel_width + 2, grid_pixel_height + 2,
+                      &rect_dsc);
 }
 
 void GameSnake::draw_score_() {
