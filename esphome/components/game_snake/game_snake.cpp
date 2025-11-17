@@ -28,6 +28,8 @@ void GameSnake::on_resize(const Rect &r) {
 
   // Calculate grid dynamically based on canvas size
   if (area_.w > 0 && area_.h > 0) {
+    bool was_uninitialized = (grid_cols_ == 0 || grid_rows_ == 0);
+
     // Calculate cell size based on smallest dimension / MIN_GRID_CELLS
     // This ensures cells are perfectly square
     int min_dimension = (area_.w < area_.h) ? area_.w : area_.h;
@@ -51,17 +53,27 @@ void GameSnake::on_resize(const Rect &r) {
 
     ESP_LOGI(TAG, "Snake grid: %dx%d cells, cell size: %dx%d px, offset: (%d,%d)", grid_cols_, grid_rows_,
              cell_width_, cell_height_, grid_offset_x_, grid_offset_y_);
+
+    // If this is the first time grid is configured, reset to position snake properly
+    if (was_uninitialized) {
+      reset();
+    }
   }
 }
 
 void GameSnake::reset() {
   ESP_LOGI(TAG, "Resetting Snake game");
 
-  // Initialize snake in the center
+  // Initialize snake in the center (only if grid is configured)
   snake_.clear();
-  snake_.push_back({grid_cols_ / 2, grid_rows_ / 2});
-  snake_.push_back({grid_cols_ / 2 - 1, grid_rows_ / 2});
-  snake_.push_back({grid_cols_ / 2 - 2, grid_rows_ / 2});
+  if (grid_cols_ > 0 && grid_rows_ > 0) {
+    snake_.push_back({grid_cols_ / 2, grid_rows_ / 2});
+    snake_.push_back({grid_cols_ / 2 - 1, grid_rows_ / 2});
+    snake_.push_back({grid_cols_ / 2 - 2, grid_rows_ / 2});
+  } else {
+    // Grid not configured yet, will be initialized in on_resize
+    snake_.push_back({0, 0});
+  }
 
   direction_ = Direction::RIGHT;
   next_direction_ = Direction::RIGHT;
@@ -75,8 +87,11 @@ void GameSnake::reset() {
   initial_render_ = true;
   needs_render_ = true;
   last_drawn_score_ = 0;
+  last_paused_ = false;
 
-  spawn_pickup_();
+  if (grid_cols_ > 0 && grid_rows_ > 0) {
+    spawn_pickup_();
+  }
 }
 
 void GameSnake::on_input(const InputEvent &event) {
@@ -84,13 +99,23 @@ void GameSnake::on_input(const InputEvent &event) {
     return;
 
   if (event.type == InputType::START) {
-    // Restart game on START button
-    this->reset();
+    if (state_.game_over) {
+      // Restart game if game over
+      this->reset();
+    } else {
+      // Toggle pause/resume if game is running
+      if (paused_) {
+        this->resume();
+      } else {
+        this->pause();
+      }
+      needs_render_ = true;  // Trigger render to show/hide pause text
+    }
     return;
   }
 
-  if (state_.game_over)
-    return;  // Ignore inputs if game over
+  if (state_.game_over || paused_)
+    return;  // Ignore inputs if game over or paused
 
   // Map input to direction changes
   Direction new_dir = next_direction_;
@@ -157,6 +182,13 @@ void GameSnake::on_input(const InputEvent &event) {
 }
 
 void GameSnake::step(float dt) {
+  // Check if we need to render pause/unpause text even when paused
+  if (needs_render_ && (paused_ || state_.game_over)) {
+    render_();
+    needs_render_ = false;
+    return;
+  }
+
   if (paused_ || state_.game_over)
     return;
 
@@ -473,6 +505,18 @@ void GameSnake::render_() {
       draw_score_();              // Draws text on top (already invalidated)
       last_drawn_score_ = state_.score;
     }
+
+    // Handle pause state changes
+    if (paused_ != last_paused_) {
+      if (!paused_) {
+        // Transitioning from paused to unpaused - clear the pause text
+        clear_center_text_area_();
+      } else {
+        // Transitioning to paused - draw pause text (handled by draw_score_)
+        draw_score_();
+      }
+      last_paused_ = paused_;
+    }
   }
 }
 
@@ -501,6 +545,16 @@ void GameSnake::clear_score_area_fast_() {
   fill_rect_fast(2, 2, 80, 14, color_bg_);
 }
 
+void GameSnake::clear_center_text_area_() {
+  // Clear center area where pause text is drawn
+  // "PAUSED" is roughly 48 pixels wide and 14 pixels tall at default font
+  const int text_w = 60;
+  const int text_h = 16;
+  const int center_x = (area_.w - text_w) / 2;
+  const int center_y = area_.h / 2 - 7 - 2;  // Aligned with pause text position, with 2px margin
+  fill_rect_fast(center_x, center_y, text_w, text_h, color_bg_);
+}
+
 void GameSnake::draw_border_() {
   lv_draw_rect_dsc_t rect_dsc;
   lv_draw_rect_dsc_init(&rect_dsc);
@@ -526,6 +580,9 @@ void GameSnake::draw_score_() {
     draw_text(0, area_.h / 2 - 10, "GAME OVER", color_snake_, LV_TEXT_ALIGN_CENTER);
     snprintf(buf, sizeof(buf), "Score: %d", state_.score);
     draw_text(0, area_.h / 2 + 4, buf, color_snake_, LV_TEXT_ALIGN_CENTER);
+  } else if (paused_) {
+    // Draw paused text
+    draw_text(0, area_.h / 2 - 7, "PAUSED", color_snake_, LV_TEXT_ALIGN_CENTER);
   }
 }
 

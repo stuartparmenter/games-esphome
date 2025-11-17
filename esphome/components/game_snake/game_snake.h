@@ -60,6 +60,7 @@ class GameSnake : public GameBase {
   bool initial_render_{true};
   bool needs_render_{true};
   uint32_t last_drawn_score_{0};
+  bool last_paused_{false};
 
   // Timing
   float update_timer_{0.0f};
@@ -89,6 +90,7 @@ class GameSnake : public GameBase {
   void draw_cell_(int gx, int gy, lv_color_t color);
   void draw_cell_fast_(int gx, int gy, lv_color_t color);
   void clear_score_area_fast_();
+  void clear_center_text_area_();
   void draw_border_();
   void draw_score_();
 };
