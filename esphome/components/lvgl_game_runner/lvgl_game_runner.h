@@ -35,7 +35,7 @@ class LvglGameRunner : public Component {
   float get_setup_priority() const override { return setup_priority::BEFORE_CONNECTION; }
 
   // Codegen wiring
-  void setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game, int x, int y, int w, int h, bool start_paused);
+  void setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game, bool start_paused);
 
   // Runtime control
   void start();  // Start/restart current game
@@ -71,13 +71,9 @@ class LvglGameRunner : public Component {
   GameBase *game_{nullptr};  // Raw pointer - game lifetime managed by components
   InputHandler input_handler_;
 
-  // Sub-rectangle (w/h == 0 => follow canvas size)
-  Area area_{};
-
   // State
   bool running_{true};
   bool rebind_{false};
-  uint16_t last_w_{0}, last_h_{0};
 
   // Timing
   uint32_t period_ms_{33};  // ~30 FPS default

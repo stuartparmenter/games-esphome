@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <lvgl.h>
 #include "esphome/core/component.h"
 #include "input_types.h"
-#include <lvgl.h>
 
 namespace esphome::lvgl_game_runner {
 
@@ -151,6 +151,21 @@ class GameBase {
    * Draw text on the canvas with alignment.
    */
   void draw_text(int x, int y, const char *text, lv_color_t color, lv_text_align_t align = LV_TEXT_ALIGN_LEFT);
+
+  /**
+   * Fast rectangle fill using direct buffer manipulation.
+   * Coordinates are relative to the game area (0,0 = top-left of game area).
+   * Much faster than fill_rect() for simple solid fills.
+   * Automatically invalidates the drawn area for LVGL redraw.
+   */
+  void fill_rect_fast(int x, int y, int w, int h, lv_color_t color);
+
+  /**
+   * Invalidate a rectangular area for LVGL redraw.
+   * Coordinates are relative to the game area - this function converts them
+   * to absolute canvas coordinates automatically.
+   */
+  void invalidate_area_rect(int x, int y, int w, int h);
 };
 
 }  // namespace esphome::lvgl_game_runner

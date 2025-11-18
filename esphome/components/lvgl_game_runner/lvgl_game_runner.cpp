@@ -76,14 +76,9 @@ void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t val
 
 void LvglGameRunner::send_input_event(const InputEvent &event) { input_handler_.push_event(event); }
 
-void LvglGameRunner::setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game, int x, int y, int w, int h,
-                                   bool start_paused) {
+void LvglGameRunner::setup_binding(lv_obj_t *canvas_obj, GameBase *initial_game, bool start_paused) {
   canvas_ = canvas_obj;
   game_ = initial_game;
-  area_.x = x;
-  area_.y = y;
-  area_.w = w;
-  area_.h = h;
   running_ = !start_paused;
   rebind_ = running_;
 }
@@ -145,9 +140,12 @@ void LvglGameRunner::on_canvas_size_change_() {
   uint16_t cw{0}, ch{0};
   if (!this->read_canvas_size_(cw, ch))
     return;
-  const int w = (area_.w > 0) ? area_.w : (int) cw;
-  const int h = (area_.h > 0) ? area_.h : (int) ch;
-  game_->on_resize(GameBase::Rect{area_.x, area_.y, w, h});
+
+  // Get actual canvas position
+  int cx = canvas_ ? lv_obj_get_x(canvas_) : 0;
+  int cy = canvas_ ? lv_obj_get_y(canvas_) : 0;
+
+  game_->on_resize(GameBase::Rect{cx, cy, cw, ch});
 }
 
 bool LvglGameRunner::ensure_bound_() {
@@ -182,19 +180,10 @@ void LvglGameRunner::process_input_() {
 }
 
 void LvglGameRunner::tick_(float dt) {
-  uint16_t cw{0}, ch{0};
-  const bool have_size = this->read_canvas_size_(cw, ch);
-
   if (rebind_) {
     if (!this->ensure_bound_())
       return;
     rebind_ = false;
-    last_w_ = cw;
-    last_h_ = ch;
-  } else if (have_size && (cw != last_w_ || ch != last_h_)) {
-    last_w_ = cw;
-    last_h_ = ch;
-    this->on_canvas_size_change_();
   }
 
   if (!game_)
@@ -237,8 +226,8 @@ void LvglGameRunner::tick_(float dt) {
 void LvglGameRunner::dump_config() {
   uint16_t cw = 0, ch = 0;
   read_canvas_size_(cw, ch);
-  ESP_LOGCONFIG(TAG, "LvglGameRunner(%p): game='%s' area=[%d,%d %dx%d] canvas=%ux%u period=%ums running=%s", this,
-                game_key_.c_str(), area_.x, area_.y, area_.w, area_.h, cw, ch, period_ms_, running_ ? "true" : "false");
+  ESP_LOGCONFIG(TAG, "LvglGameRunner(%p): game='%s' canvas=%ux%u period=%ums running=%s", this, game_key_.c_str(), cw,
+                ch, period_ms_, running_ ? "true" : "false");
 #if LVGL_GAME_RUNNER_METRICS
   ESP_LOGCONFIG(TAG, "Metrics: enabled (period=%ums)", METRICS_PERIOD_MS);
 #else

@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
 #include "esphome/components/lvgl_game_runner/game_base.h"
 #include "esphome/components/lvgl_game_runner/game_state.h"
-#include <vector>
-#include <cstdint>
 
 namespace esphome::game_snake {
 
@@ -31,9 +31,12 @@ class GameSnake : public GameBase {
   void reset() override;
 
  private:
-  // Grid configuration
-  static constexpr int GRID_COLS = 25;
-  static constexpr int GRID_ROWS = 11;
+  // Grid configuration (dynamically calculated in on_resize)
+  static constexpr int MIN_GRID_CELLS = 12;  // Ideal size for smallest dimension
+  int grid_cols_{0};
+  int grid_rows_{0};
+  int grid_offset_x_{0};  // Centering offset if pixels don't divide evenly
+  int grid_offset_y_{0};
 
   // Game state
   struct Position {
@@ -42,13 +45,22 @@ class GameSnake : public GameBase {
     bool operator==(const Position &other) const { return x == other.x && y == other.y; }
   };
 
+  static constexpr Position NULL_POSITION = {-1, -1};
+
   enum class Direction { UP, DOWN, LEFT, RIGHT };
 
   std::vector<Position> snake_;
+  Position snake_tail_{NULL_POSITION};
   Position pickup_;
+  Position last_pickup_{NULL_POSITION};
+
   Direction direction_{Direction::RIGHT};
   Direction next_direction_{Direction::RIGHT};
   GameState state_;
+  bool initial_render_{true};
+  bool needs_render_{true};
+  uint32_t last_drawn_score_{0};
+  bool last_paused_{false};
 
   // Timing
   float update_timer_{0.0f};
@@ -76,6 +88,9 @@ class GameSnake : public GameBase {
   // Rendering
   void render_();
   void draw_cell_(int gx, int gy, lv_color_t color);
+  void draw_cell_fast_(int gx, int gy, lv_color_t color);
+  void clear_score_area_fast_();
+  void clear_center_text_area_();
   void draw_border_();
   void draw_score_();
 };
