@@ -468,41 +468,19 @@ void GamePlatform::on_input(const lvgl_game_runner::InputEvent &event) {
   // Handle input based on type and press/release
   switch (event.type) {
     case InputType::LEFT:
-      if (player.controls_reversed) {
-        player.vx = event.pressed ? base_speed_ : 0.0f;
-        if (event.pressed) player.facing_right = true;
-      } else {
-        player.vx = event.pressed ? -base_speed_ : 0.0f;
-        if (event.pressed) player.facing_right = false;
-      }
+      player.holding_left = event.pressed;
       break;
 
     case InputType::RIGHT:
-      if (player.controls_reversed) {
-        player.vx = event.pressed ? -base_speed_ : 0.0f;
-        if (event.pressed) player.facing_right = false;
-      } else {
-        player.vx = event.pressed ? base_speed_ : 0.0f;
-        if (event.pressed) player.facing_right = true;
-      }
+      player.holding_right = event.pressed;
       break;
 
     case InputType::UP:
-      // Climb ladder
-      if (player.on_ladder && event.pressed) {
-        player.vy = -base_speed_ * 0.7f;
-      } else if (player.on_ladder && !event.pressed) {
-        player.vy = 0.0f;
-      }
+      player.holding_up = event.pressed;
       break;
 
     case InputType::DOWN:
-      // Descend ladder or drop through platform
-      if (player.on_ladder && event.pressed) {
-        player.vy = base_speed_ * 0.7f;
-      } else if (player.on_ladder && !event.pressed) {
-        player.vy = 0.0f;
-      }
+      player.holding_down = event.pressed;
       break;
 
     case InputType::A:  // Jump
@@ -519,6 +497,31 @@ void GamePlatform::on_input(const lvgl_game_runner::InputEvent &event) {
 
     default:
       break;
+  }
+
+  // Calculate horizontal velocity based on held buttons
+  bool left_pressed = player.controls_reversed ? player.holding_right : player.holding_left;
+  bool right_pressed = player.controls_reversed ? player.holding_left : player.holding_right;
+
+  if (left_pressed && !right_pressed) {
+    player.vx = -base_speed_;
+    player.facing_right = false;
+  } else if (right_pressed && !left_pressed) {
+    player.vx = base_speed_;
+    player.facing_right = true;
+  } else {
+    player.vx = 0.0f;
+  }
+
+  // Handle ladder climbing based on held buttons
+  if (player.on_ladder) {
+    if (player.holding_up && !player.holding_down) {
+      player.vy = -base_speed_ * 0.7f;
+    } else if (player.holding_down && !player.holding_up) {
+      player.vy = base_speed_ * 0.7f;
+    } else {
+      player.vy = 0.0f;
+    }
   }
 }
 
@@ -950,6 +953,42 @@ void GamePlatform::update_player_physics_(Player &player, float dt) {
     player.invincibility_timer -= dt;
   }
 
+  // Update power-up effect timers
+  if (player.speed_boost_timer > 0) {
+    player.speed_boost_timer -= dt;
+    if (player.speed_boost_timer <= 0) {
+      player.speed_modifier = 1.0f;
+    }
+  }
+
+  if (player.jump_boost_timer > 0) {
+    player.jump_boost_timer -= dt;
+    if (player.jump_boost_timer <= 0) {
+      player.jump_modifier = 1.0f;
+    }
+  }
+
+  if (player.shield_timer > 0) {
+    player.shield_timer -= dt;
+    if (player.shield_timer <= 0) {
+      player.has_shield = false;
+    }
+  }
+
+  if (player.magnet_timer > 0) {
+    player.magnet_timer -= dt;
+    if (player.magnet_timer <= 0) {
+      player.has_magnet = false;
+    }
+  }
+
+  if (player.reverse_timer > 0) {
+    player.reverse_timer -= dt;
+    if (player.reverse_timer <= 0) {
+      player.controls_reversed = false;
+    }
+  }
+
   // Apply velocity
   float new_x = player.x + player.vx * dt * player.speed_modifier;
   float new_y = player.y + player.vy * dt;
@@ -1320,11 +1359,13 @@ void GamePlatform::apply_powerup_(Player &player, const Powerup &powerup) {
 
     case PowerupType::SPEED_BOOST:
       player.speed_modifier = 1.5f;
+      player.speed_boost_timer = powerup.duration;
       add_score_(25);
       break;
 
     case PowerupType::JUMP_BOOST:
       player.jump_modifier = 1.3f;
+      player.jump_boost_timer = powerup.duration;
       add_score_(25);
       break;
 
@@ -1345,25 +1386,30 @@ void GamePlatform::apply_powerup_(Player &player, const Powerup &powerup) {
 
     case PowerupType::SHIELD:
       player.has_shield = true;
+      player.shield_timer = powerup.duration;
       add_score_(100);
       break;
 
     case PowerupType::MAGNET:
       player.has_magnet = true;
+      player.magnet_timer = powerup.duration;
       add_score_(50);
       break;
 
     // Powerdowns
     case PowerupType::SLOW:
       player.speed_modifier = 0.5f;
+      player.speed_boost_timer = powerup.duration;
       break;
 
     case PowerupType::REVERSE_CONTROLS:
       player.controls_reversed = true;
+      player.reverse_timer = powerup.duration;
       break;
 
     case PowerupType::LOW_JUMP:
       player.jump_modifier = 0.6f;
+      player.jump_boost_timer = powerup.duration;
       break;
 
     default:

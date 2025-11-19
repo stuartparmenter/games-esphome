@@ -132,6 +132,19 @@ struct Player {
   uint8_t player_num;            // 0-3
   lv_color_t color;
 
+  // Input state tracking
+  bool holding_left;
+  bool holding_right;
+  bool holding_up;
+  bool holding_down;
+
+  // Power-up effect timers
+  float speed_boost_timer;
+  float jump_boost_timer;
+  float shield_timer;
+  float magnet_timer;
+  float reverse_timer;
+
   void reset() {
     vx = vy = 0.0f;
     active = true;
@@ -147,6 +160,15 @@ struct Player {
     has_magnet = false;
     controls_reversed = false;
     keys_collected = 0;
+    holding_left = false;
+    holding_right = false;
+    holding_up = false;
+    holding_down = false;
+    speed_boost_timer = 0.0f;
+    jump_boost_timer = 0.0f;
+    shield_timer = 0.0f;
+    magnet_timer = 0.0f;
+    reverse_timer = 0.0f;
   }
 };
 
