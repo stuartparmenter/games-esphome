@@ -411,6 +411,29 @@ void GamePlatform::step(float dt) {
   // Update moving platforms
   update_moving_platforms_(dt);
 
+  // Update magnet attraction for coins
+  for (const auto &player : players_) {
+    if (!player.active || !player.has_magnet) continue;
+
+    float magnet_range = tile_size_ * 5;
+    float magnet_strength = tile_size_ * 3.0f;
+
+    for (auto &powerup : powerups_) {
+      if (!powerup.active) continue;
+      if (powerup.type != PowerupType::COIN) continue;
+
+      float dx = player.x - powerup.x;
+      float dy = player.y - powerup.y;
+      float dist = std::sqrt(dx * dx + dy * dy);
+
+      if (dist < magnet_range && dist > 1.0f) {
+        // Attract coin towards player
+        powerup.x += (dx / dist) * magnet_strength * dt;
+        powerup.y += (dy / dist) * magnet_strength * dt;
+      }
+    }
+  }
+
   // Update particles
   update_particles_(dt);
 
@@ -1456,6 +1479,17 @@ void GamePlatform::respawn_player_(Player &player) {
   player.jump_modifier = 1.0f;
   player.controls_reversed = false;
   player.jumps_remaining = double_jump_enabled_ ? 2 : 1;
+  player.has_shield = false;
+  player.has_magnet = false;
+  player.speed_boost_timer = 0.0f;
+  player.jump_boost_timer = 0.0f;
+  player.shield_timer = 0.0f;
+  player.magnet_timer = 0.0f;
+  player.reverse_timer = 0.0f;
+  player.holding_left = false;
+  player.holding_right = false;
+  player.holding_up = false;
+  player.holding_down = false;
 }
 
 // =============================================================================
