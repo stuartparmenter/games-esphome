@@ -74,6 +74,28 @@ class GameBase {
   bool is_paused() const { return paused_; }
 
   /**
+   * Get maximum number of players this game supports (1-4).
+   * Override this in game implementations.
+   */
+  virtual uint8_t get_max_players() const { return 1; }
+
+  /**
+   * Set number of human players (rest are AI).
+   * Called during setup from config.
+   */
+  void set_num_human_players(uint8_t num) { num_human_players_ = num; }
+
+  /**
+   * Get number of human players.
+   */
+  uint8_t get_num_human_players() const { return num_human_players_; }
+
+  /**
+   * Check if a player number is human-controlled.
+   */
+  bool is_human_player(uint8_t player_num) const { return player_num <= num_human_players_; }
+
+  /**
    * Optional: Called when a sound event should be triggered.
    * Games can emit sound events for external handling.
    * Not implemented yet, but framework is ready.
@@ -92,9 +114,10 @@ class GameBase {
   }
 
  protected:
-  lv_obj_t *canvas_{nullptr};  // LVGL canvas object
-  Rect area_{};                // Rendering area
-  bool paused_{false};         // Pause state
+  lv_obj_t *canvas_{nullptr};     // LVGL canvas object
+  Rect area_{};                   // Rendering area
+  bool paused_{false};            // Pause state
+  uint8_t num_human_players_{1};  // Number of human players (rest are AI)
 
   /**
    * Helper to get canvas buffer for direct pixel manipulation.

@@ -45,8 +45,8 @@ class LvglGameRunner : public Component {
   bool is_running() const { return running_; }
 
   // Input handling
-  void send_input(InputType type, bool pressed = true, int16_t value = 0);
-  void send_input(const char *input_str, bool pressed = true, int16_t value = 0);  // String overload for YAML
+  void send_input(InputType type, uint8_t player = 1, bool pressed = true, int16_t value = 0);
+  void send_input(const char *input_str, uint8_t player = 1, bool pressed = true, int16_t value = 0);  // String overload
   void send_input_event(const InputEvent &event);
 
   // Per-instance timing
@@ -143,6 +143,7 @@ template<typename... Ts> class SetGameAction : public Action<Ts...>, public Pare
 template<typename... Ts> class SendInputAction : public Action<Ts...>, public Parented<LvglGameRunner> {
  public:
   TEMPLATABLE_VALUE(InputType, input_type);
+  TEMPLATABLE_VALUE(uint8_t, player);
   TEMPLATABLE_VALUE(bool, pressed);
 
 #if ESPHOME_VERSION_CODE >= VERSION_CODE(2025, 11, 0)
@@ -152,14 +153,20 @@ template<typename... Ts> class SendInputAction : public Action<Ts...>, public Pa
 #endif
     InputType input_type_value = this->input_type_.value(x...);
 
+    // Get player number (defaults to 1 if not specified)
+    uint8_t player_value = 1;
+    if (this->player_.has_value()) {
+      player_value = this->player_.value(x...);
+    }
+
     // Get pressed state (defaults to true if not specified)
     bool pressed_value = true;
     if (this->pressed_.has_value()) {
       pressed_value = this->pressed_.value(x...);
     }
 
-    // Send input directly with enum type
-    this->parent_->send_input(input_type_value, pressed_value);
+    // Send input with player number
+    this->parent_->send_input(input_type_value, player_value, pressed_value);
   }
 };
 

@@ -30,6 +30,9 @@ class GameSnake : public GameBase {
   void on_input(const InputEvent &event) override;
   void reset() override;
 
+  // Snake is single-player only
+  uint8_t get_max_players() const override { return 1; }
+
  private:
   // Grid configuration (dynamically calculated in on_resize)
   static constexpr int MIN_GRID_CELLS = 12;  // Ideal size for smallest dimension

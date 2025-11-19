@@ -43,11 +43,11 @@ void LvglGameRunner::start() {
     resume();
 }
 
-void LvglGameRunner::send_input(InputType type, bool pressed, int16_t value) {
-  input_handler_.push_event(InputEvent(type, pressed, value));
+void LvglGameRunner::send_input(InputType type, uint8_t player, bool pressed, int16_t value) {
+  input_handler_.push_event(InputEvent(type, player, pressed, value));
 }
 
-void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t value) {
+void LvglGameRunner::send_input(const char *input_str, uint8_t player, bool pressed, int16_t value) {
   // Map string to InputType using hash table for O(1) lookup instead of O(n) string comparisons
   static const std::unordered_map<std::string, InputType> input_type_map = {
       {"UP", InputType::UP},
@@ -71,7 +71,7 @@ void LvglGameRunner::send_input(const char *input_str, bool pressed, int16_t val
     return;
   }
 
-  send_input(it->second, pressed, value);
+  send_input(it->second, player, pressed, value);
 }
 
 void LvglGameRunner::send_input_event(const InputEvent &event) { input_handler_.push_event(event); }

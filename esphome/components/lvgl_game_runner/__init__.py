@@ -48,6 +48,8 @@ CONF_FPS = "fps"
 CONF_CANVAS = "canvas"
 CONF_START_PAUSED = "start_paused"
 CONF_PRESSED = "pressed"
+CONF_PLAYER = "player"
+CONF_NUM_HUMAN_PLAYERS = "num_human_players"
 
 # Input type enum matching C++ InputType
 InputTypeEnum = ns.enum("InputType", is_class=True)
@@ -170,6 +172,7 @@ async def setgame_to_code(config, action_id, template_arg, args):
         {
             cv.GenerateID(): cv.use_id(LvglGameRunner),
             cv.Required(CONF_INPUT): cv.templatable(cv.enum(INPUT_TYPES)),
+            cv.Optional(CONF_PLAYER, default=1): cv.templatable(cv.int_range(min=1, max=4)),
             cv.Required(CONF_PRESSED): cv.templatable(cv.boolean),
         }
     ),
@@ -181,6 +184,7 @@ async def setgame_to_code(config, action_id, template_arg, args):
         {
             cv.GenerateID(): cv.use_id(LvglGameRunner),
             cv.Required(CONF_INPUT): cv.templatable(cv.enum(INPUT_TYPES)),
+            cv.Optional(CONF_PLAYER, default=1): cv.templatable(cv.int_range(min=1, max=4)),
             cv.Optional(CONF_PRESSED, default=True): cv.templatable(cv.boolean),
         },
         key=CONF_INPUT,
@@ -193,6 +197,7 @@ async def setgame_to_code(config, action_id, template_arg, args):
         {
             cv.GenerateID(): cv.use_id(LvglGameRunner),
             cv.Required(CONF_INPUT): cv.templatable(cv.enum(INPUT_TYPES)),
+            cv.Optional(CONF_PLAYER, default=1): cv.templatable(cv.int_range(min=1, max=4)),
             cv.Optional(CONF_PRESSED, default=False): cv.templatable(cv.boolean),
         },
         key=CONF_INPUT,
@@ -203,6 +208,10 @@ async def input_action_to_code(config, action_id, template_arg, args):
     await cg.register_parented(var, config[CONF_ID])
     tmpl = await cg.templatable(config[CONF_INPUT], args, InputTypeEnum)
     cg.add(var.set_input_type(tmpl))
+
+    # Player number (defaults to 1)
+    player_tmpl = await cg.templatable(config[CONF_PLAYER], args, cg.uint8)
+    cg.add(var.set_player(player_tmpl))
 
     # All actions have CONF_PRESSED:
     # - send_input: required (user must specify)

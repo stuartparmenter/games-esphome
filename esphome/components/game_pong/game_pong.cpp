@@ -2,6 +2,7 @@
 // Ported from: https://github.com/stuartparmenter/hub75-studio
 
 #include "game_pong.h"
+#include "pong_ai.h"
 #include "esphome/core/log.h"
 #include <algorithm>
 #include <cstdlib>
@@ -24,12 +25,7 @@ GamePong::GamePong()
       right_y_(0.0f),
       left_vy_(0.0f),
       right_vy_(0.0f),
-      left_react_frames_(0),
-      right_react_frames_(0),
-      serve_idx_(0),
-      will_miss_left_(false),
-      will_miss_right_(false),
-      rng_state_(2463534242) {
+      serve_idx_(0) {
   // Initialize colors
   color_fg_ = lv_color_hex(0xFFFFFF);
   color_bg_ = lv_color_hex(0x000000);
@@ -77,24 +73,13 @@ void GamePong::on_resize(const Rect &r) {
     if (ball_speed_y_ < 0.5f)
       ball_speed_y_ = 0.5f;
 
-    // Paddle speeds (scale with canvas height)
-    ai_left_max_speed_ = area_.h * AI_L_SPEED_RATIO;
-    ai_right_max_speed_ = area_.h * AI_R_SPEED_RATIO;
+    // Paddle speed (scales with canvas height)
     player_speed_ = area_.h * PLAYER_SPEED_RATIO;
-
-    // Ensure minimum paddle speeds
-    if (ai_left_max_speed_ < 1.0f)
-      ai_left_max_speed_ = 1.0f;
-    if (ai_right_max_speed_ < 1.0f)
-      ai_right_max_speed_ = 1.0f;
     if (player_speed_ < 1.0f)
       player_speed_ = 1.0f;
 
-    ESP_LOGI(TAG,
-             "Pong scaled: paddle=%dx%d, ball=%dx%d, margin=%d, speed=%.2fx%.2f, ai_speed=%.2f/%.2f, "
-             "player_speed=%.2f",
-             paddle_w_, paddle_h_, ball_w_, ball_h_, paddle_margin_x_, ball_speed_x_, ball_speed_y_,
-             ai_left_max_speed_, ai_right_max_speed_, player_speed_);
+    ESP_LOGI(TAG, "Pong scaled: paddle=%dx%d, ball=%dx%d, margin=%d, speed=%.2fx%.2f, player_speed=%.2f", paddle_w_,
+             paddle_h_, ball_w_, ball_h_, paddle_margin_x_, ball_speed_x_, ball_speed_y_, player_speed_);
 
     // Reset paddles to center
     left_y_ = (area_.h - paddle_h_) / 2.0f;
@@ -121,16 +106,23 @@ void GamePong::reset() {
   last_ball_y_ = -1;
   last_left_y_ = -1;
   last_right_y_ = -1;
+  last_ball_over_score_ = false;
 
-  // Reset input state
-  input_up_held_ = false;
-  input_down_held_ = false;
+  // Reset input state for all players
+  input_p1_up_held_ = false;
+  input_p1_down_held_ = false;
+  input_p2_up_held_ = false;
+  input_p2_down_held_ = false;
 
   reset_ball_();
 }
 
 void GamePong::on_input(const InputEvent &event) {
-  // Handle START button (only on press)
+  // Ignore NONE events (used by AI when no action needed)
+  if (event.type == InputType::NONE)
+    return;
+
+  // Handle START button (only on press, any player can trigger)
   if (event.type == InputType::START && event.pressed) {
     if (state_.game_over) {
       // Restart game if game over
@@ -142,55 +134,77 @@ void GamePong::on_input(const InputEvent &event) {
       } else {
         this->pause();
         // Clear input state when pausing to avoid stuck inputs
-        input_up_held_ = false;
-        input_down_held_ = false;
+        input_p1_up_held_ = false;
+        input_p1_down_held_ = false;
+        input_p2_up_held_ = false;
+        input_p2_down_held_ = false;
       }
       needs_render_ = true;  // Trigger render to show/hide pause text
     }
     return;
   }
 
-  if (state_.game_over || paused_ || !player_control_)
-    return;  // Ignore inputs if game over, paused, or AI mode
+  if (state_.game_over || paused_)
+    return;  // Ignore inputs if game over or paused
 
-  // Player controls left paddle - track button state
-  switch (event.type) {
-    case InputType::UP:
-      input_up_held_ = event.pressed;
-      break;
-    case InputType::DOWN:
-      input_down_held_ = event.pressed;
-      break;
-    default:
-      break;
+  // Route inputs based on player number
+  // Player 1 controls left paddle, Player 2 controls right paddle
+  // Note: Both human and AI inputs are processed here
+  // AI inputs are injected via update_ai_(), human inputs come from external sources
+  if (event.player == 1) {
+    switch (event.type) {
+      case InputType::UP:
+        input_p1_up_held_ = event.pressed;
+        break;
+      case InputType::DOWN:
+        input_p1_down_held_ = event.pressed;
+        break;
+      default:
+        break;
+    }
+  } else if (event.player == 2) {
+    switch (event.type) {
+      case InputType::UP:
+        input_p2_up_held_ = event.pressed;
+        break;
+      case InputType::DOWN:
+        input_p2_down_held_ = event.pressed;
+        break;
+      default:
+        break;
+    }
   }
 }
 
-// ========== PRNG Helpers ==========
-
-uint32_t GamePong::rng_() {
-  // xorshift32
-  rng_state_ ^= rng_state_ << 13;
-  rng_state_ ^= rng_state_ >> 17;
-  rng_state_ ^= rng_state_ << 5;
-  return rng_state_;
-}
-
-float GamePong::rand01_() {
-  return (rng_() & 0xFFFFFF) / 16777216.0f;  // [0, 1)
-}
-
-float GamePong::rand_sym_() {
-  return rand01_() * 2.0f - 1.0f;  // [-1, 1]
-}
-
-int GamePong::ms_to_frames_(int ms) {
-  // Convert milliseconds to frames (assuming ~30 FPS)
-  int frames = (ms + 16) / 33;  // 33ms per frame at 30 FPS
-  return frames < 0 ? 0 : frames;
-}
-
 // ========== Game Logic ==========
+
+void GamePong::update_ai_() {
+  // Create AI controllers if needed
+  if (!is_human_player(1) && !ai_player1_) {
+    ai_player1_ = std::make_unique<PongAI>(1);
+  }
+  if (!is_human_player(2) && !ai_player2_) {
+    ai_player2_ = std::make_unique<PongAI>(2);
+  }
+
+  // Destroy AI controllers if no longer needed
+  if (is_human_player(1) && ai_player1_) {
+    ai_player1_.reset();
+  }
+  if (is_human_player(2) && ai_player2_) {
+    ai_player2_.reset();
+  }
+
+  // Update AI players and inject their inputs
+  if (ai_player1_) {
+    auto event = ai_player1_->update(0.0f, state_, this);
+    on_input(event);
+  }
+  if (ai_player2_) {
+    auto event = ai_player2_->update(0.0f, state_, this);
+    on_input(event);
+  }
+}
 
 void GamePong::reset_ball_() {
   // Center the ball (only if canvas is initialized)
@@ -215,83 +229,13 @@ void GamePong::serve_ball_() {
   left_vy_ = 0;
   right_vy_ = 0;
 
-  // Set reaction timers
-  left_react_frames_ = ms_to_frames_(AI_L_REACT_MS);
-  right_react_frames_ = ms_to_frames_(AI_R_REACT_MS);
-
-  // Determine if the receiver will intentionally miss this rally
-  will_miss_left_ = false;
-  will_miss_right_ = false;
-  bool to_right = (vx_ > 0);
-  float miss_p = AI_MISS_CHANCE;
-  if (to_right) {
-    if (rand01_() < miss_p)
-      will_miss_right_ = true;
-  } else {
-    if (rand01_() < miss_p)
-      will_miss_left_ = true;
+  // Reset AI controllers on new serve
+  if (ai_player1_) {
+    ai_player1_->reset();
   }
-}
-
-void GamePong::update_paddle_(bool is_left, float &top_y, float &vy, int &react_frames, float bias,
-                              float max_speed_base) {
-  // Decide if ball moves toward this paddle
-  bool toward = is_left ? (vx_ < 0) : (vx_ > 0);
-
-  // Desired tracking center with tiny jitter & bias
-  float jitter = AI_JITTER_PX * rand_sym_();
-  float ball_center_y = ball_y_ + ball_h_ / 2.0f;
-  float target = ball_center_y + bias + jitter;
-
-  // If ball moves away: drift toward mid slowly
-  float mid = area_.h / 2.0f;
-  if (!toward)
-    target = mid + bias * 0.5f;
-
-  // Reaction delay: do nothing while timer > 0
-  if (toward && react_frames > 0) {
-    react_frames--;
-    // Light damping to settle vy
-    vy *= 0.9f;
-    top_y += vy;
-  } else {
-    // Panic boost when horizontally close
-    int px = is_left ? (int) ball_x_ : (int) (area_.w - (ball_x_ + ball_w_));
-    float max_speed = max_speed_base;
-    if (px <= AI_PANIC_ZONE)
-      max_speed *= AI_PANIC_MULT;
-
-    // Proportional-ish target with slight overshoot tendency
-    float center = top_y + (paddle_h_ / 2.0f);
-    float err = (target - center);
-    float desired_speed = err * AI_ERR_GAIN;
-
-    // Clamp desired speed
-    if (desired_speed > max_speed)
-      desired_speed = max_speed;
-    if (desired_speed < -max_speed)
-      desired_speed = -max_speed;
-
-    // Accelerate toward desired speed
-    float accel = AI_ACCEL;
-    if (desired_speed > vy) {
-      vy += accel;
-      if (vy > desired_speed)
-        vy = desired_speed;
-    } else {
-      vy -= accel;
-      if (vy < desired_speed)
-        vy = desired_speed;
-    }
-
-    top_y += vy;
+  if (ai_player2_) {
+    ai_player2_->reset();
   }
-
-  // Clamp inside screen
-  if (top_y < 0)
-    top_y = 0;
-  if (top_y > (area_.h - paddle_h_))
-    top_y = area_.h - paddle_h_;
 }
 
 bool GamePong::check_paddle_collision_(float ball_top, float ball_bottom, float paddle_y) {
@@ -314,6 +258,9 @@ void GamePong::step(float dt) {
   if (paused_ || state_.game_over)
     return;
 
+  // Update AI controllers (they inject inputs via on_input)
+  update_ai_();
+
   // Integrate ball
   float nx = ball_x_ + vx_;
   float ny = ball_y_ + vy_;
@@ -327,32 +274,41 @@ void GamePong::step(float dt) {
     vy_ = -vy_;
   }
 
-  // Update paddles
-  if (player_control_) {
-    // Player controls left paddle based on held buttons
-    if (input_up_held_ && !input_down_held_) {
-      left_vy_ = -player_speed_;
-    } else if (input_down_held_ && !input_up_held_) {
-      left_vy_ = player_speed_;
-    } else {
-      // Both or neither held - stop
-      left_vy_ = 0.0f;
-    }
-
-    left_y_ += left_vy_;
-
-    // Clamp inside screen
-    if (left_y_ < 0)
-      left_y_ = 0;
-    if (left_y_ > (area_.h - paddle_h_))
-      left_y_ = area_.h - paddle_h_;
+  // Update left paddle based on input state
+  if (input_p1_up_held_ && !input_p1_down_held_) {
+    left_vy_ = -player_speed_;
+  } else if (input_p1_down_held_ && !input_p1_up_held_) {
+    left_vy_ = player_speed_;
   } else {
-    // AI controls left paddle
-    update_paddle_(true, left_y_, left_vy_, left_react_frames_, AI_BIAS_LEFT, ai_left_max_speed_);
+    // Both or neither held - stop
+    left_vy_ = 0.0f;
   }
 
-  // AI always controls right paddle
-  update_paddle_(false, right_y_, right_vy_, right_react_frames_, AI_BIAS_RIGHT, ai_right_max_speed_);
+  left_y_ += left_vy_;
+
+  // Clamp inside screen
+  if (left_y_ < 0)
+    left_y_ = 0;
+  if (left_y_ > (area_.h - paddle_h_))
+    left_y_ = area_.h - paddle_h_;
+
+  // Update right paddle based on input state
+  if (input_p2_up_held_ && !input_p2_down_held_) {
+    right_vy_ = -player_speed_;
+  } else if (input_p2_down_held_ && !input_p2_up_held_) {
+    right_vy_ = player_speed_;
+  } else {
+    // Both or neither held - stop
+    right_vy_ = 0.0f;
+  }
+
+  right_y_ += right_vy_;
+
+  // Clamp inside screen
+  if (right_y_ < 0)
+    right_y_ = 0;
+  if (right_y_ > (area_.h - paddle_h_))
+    right_y_ = area_.h - paddle_h_;
 
   // Paddle plane positions
   int left_x = paddle_margin_x_;
@@ -363,13 +319,7 @@ void GamePong::step(float dt) {
 
   // LEFT paddle collision
   if (nx <= (left_x + paddle_w_)) {
-    bool overlap = check_paddle_collision_(ball_top, ball_bottom, left_y_);
-
-    // Force miss if that was chosen for this rally
-    if (will_miss_left_)
-      overlap = false;
-
-    if (overlap) {
+    if (check_paddle_collision_(ball_top, ball_bottom, left_y_)) {
       nx = left_x + paddle_w_;
       vx_ = fabsf(ball_speed_x_);
       // Add spin from paddle movement
@@ -380,12 +330,7 @@ void GamePong::step(float dt) {
 
   // RIGHT paddle collision
   if ((nx + ball_w_) >= right_x) {
-    bool overlap = check_paddle_collision_(ball_top, ball_bottom, right_y_);
-
-    if (will_miss_right_)
-      overlap = false;
-
-    if (overlap) {
+    if (check_paddle_collision_(ball_top, ball_bottom, right_y_)) {
       nx = right_x - ball_w_;
       vx_ = -fabsf(ball_speed_x_);
       float offset = ((ny + ball_h_ / 2.0f) - (right_y_ + paddle_h_ / 2.0f)) / (paddle_h_ / 2.0f);
@@ -460,15 +405,25 @@ void GamePong::render_() {
     last_ball_y_ = (int) ball_y_;
     last_left_y_ = (int) left_y_;
     last_right_y_ = (int) right_y_;
+    last_ball_over_score_ = false;  // Will be updated on next frame
 
     // Full invalidation for initial render
     lv_obj_invalidate(canvas_);
   } else {
     // Fast incremental update using direct buffer manipulation
 
-    // Erase and redraw ball if it moved
+    // Check if ball overlaps score area (top center)
     int ball_x_int = (int) ball_x_;
     int ball_y_int = (int) ball_y_;
+    int score_left = area_.w / 2 - 30;
+    int score_right = area_.w / 2 + 30;
+    int score_top = 2;
+    int score_bottom = 16;
+
+    bool ball_over_score = (ball_x_int + ball_w_ >= score_left && ball_x_int <= score_right &&
+                           ball_y_int + ball_h_ >= score_top && ball_y_int <= score_bottom);
+
+    // Erase and redraw ball if it moved
     if (ball_x_int != last_ball_x_ || ball_y_int != last_ball_y_) {
       if (last_ball_x_ >= 0 && last_ball_y_ >= 0) {
         erase_ball_fast_(last_ball_x_, last_ball_y_);
@@ -477,6 +432,13 @@ void GamePong::render_() {
       last_ball_x_ = ball_x_int;
       last_ball_y_ = ball_y_int;
     }
+
+    // If ball just moved away from score area, redraw score
+    if (last_ball_over_score_ && !ball_over_score) {
+      clear_score_area_fast_();
+      draw_score_();
+    }
+    last_ball_over_score_ = ball_over_score;
 
     // Erase and redraw left paddle if it moved
     int left_y_int = (int) left_y_;
