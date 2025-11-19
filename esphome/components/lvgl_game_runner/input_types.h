@@ -35,6 +35,9 @@ enum class InputType {
 
   // Future: touchscreen
   TOUCH,
+
+  // No input (used by AI to indicate no action)
+  NONE,
 };
 
 /**
@@ -42,11 +45,12 @@ enum class InputType {
  */
 struct InputEvent {
   InputType type;
-  bool pressed;   // true = press/trigger, false = release
-  int16_t value;  // Optional: analog value, touch coordinates, rotation steps, etc.
+  uint8_t player;  // Player number (1-4)
+  bool pressed;    // true = press/trigger, false = release
+  int16_t value;   // Optional: analog value, touch coordinates, rotation steps, etc.
 
-  InputEvent() : type(InputType::UP), pressed(false), value(0) {}
-  InputEvent(InputType t, bool p = true, int16_t v = 0) : type(t), pressed(p), value(v) {}
+  InputEvent() : type(InputType::NONE), player(1), pressed(false), value(0) {}
+  InputEvent(InputType t, uint8_t pl = 1, bool p = true, int16_t v = 0) : type(t), player(pl), pressed(p), value(v) {}
 };
 
 }  // namespace esphome::lvgl_game_runner

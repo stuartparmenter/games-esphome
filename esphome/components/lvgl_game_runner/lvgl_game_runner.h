@@ -45,8 +45,8 @@ class LvglGameRunner : public Component {
   bool is_running() const { return running_; }
 
   // Input handling
-  void send_input(InputType type, bool pressed = true, int16_t value = 0);
-  void send_input(const char *input_str, bool pressed = true, int16_t value = 0);  // String overload for YAML
+  void send_input(InputType type, uint8_t player = 1, bool pressed = true, int16_t value = 0);
+  void send_input(const char *input_str, uint8_t player = 1, bool pressed = true, int16_t value = 0);  // String overload
   void send_input_event(const InputEvent &event);
 
   // Per-instance timing
@@ -142,51 +142,31 @@ template<typename... Ts> class SetGameAction : public Action<Ts...>, public Pare
 
 template<typename... Ts> class SendInputAction : public Action<Ts...>, public Parented<LvglGameRunner> {
  public:
-  TEMPLATABLE_VALUE(std::string, input_type);
+  TEMPLATABLE_VALUE(InputType, input_type);
+  TEMPLATABLE_VALUE(uint8_t, player);
+  TEMPLATABLE_VALUE(bool, pressed);
 
 #if ESPHOME_VERSION_CODE >= VERSION_CODE(2025, 11, 0)
   void play(const Ts &...x) override {
 #else
   void play(Ts... x) override {
 #endif
-    const std::string input_str = this->input_type_.value(x...);
-    if (input_str.empty())
-      return;
+    InputType input_type_value = this->input_type_.value(x...);
 
-    // Map string to InputType
-    InputType type = InputType::UP;
-    if (input_str == "UP")
-      type = InputType::UP;
-    else if (input_str == "DOWN")
-      type = InputType::DOWN;
-    else if (input_str == "LEFT")
-      type = InputType::LEFT;
-    else if (input_str == "RIGHT")
-      type = InputType::RIGHT;
-    else if (input_str == "A")
-      type = InputType::A;
-    else if (input_str == "B")
-      type = InputType::B;
-    else if (input_str == "SELECT")
-      type = InputType::SELECT;
-    else if (input_str == "START")
-      type = InputType::START;
-    else if (input_str == "L_TRIGGER")
-      type = InputType::L_TRIGGER;
-    else if (input_str == "R_TRIGGER")
-      type = InputType::R_TRIGGER;
-    else if (input_str == "ROTATE_CW")
-      type = InputType::ROTATE_CW;
-    else if (input_str == "ROTATE_CCW")
-      type = InputType::ROTATE_CCW;
-    else if (input_str == "TOUCH")
-      type = InputType::TOUCH;
-    else {
-      ESP_LOGW("lvgl_game_runner", "Unknown input type: %s", input_str.c_str());
-      return;
+    // Get player number (defaults to 1 if not specified)
+    uint8_t player_value = 1;
+    if (this->player_.has_value()) {
+      player_value = this->player_.value(x...);
     }
 
-    this->parent_->send_input(type);
+    // Get pressed state (defaults to true if not specified)
+    bool pressed_value = true;
+    if (this->pressed_.has_value()) {
+      pressed_value = this->pressed_.value(x...);
+    }
+
+    // Send input with player number
+    this->parent_->send_input(input_type_value, player_value, pressed_value);
   }
 };
 

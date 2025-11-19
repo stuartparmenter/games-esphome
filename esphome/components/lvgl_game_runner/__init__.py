@@ -47,6 +47,27 @@ CONF_INITIAL_GAME = "initial_game"
 CONF_FPS = "fps"
 CONF_CANVAS = "canvas"
 CONF_START_PAUSED = "start_paused"
+CONF_PRESSED = "pressed"
+CONF_PLAYER = "player"
+CONF_NUM_HUMAN_PLAYERS = "num_human_players"
+
+# Input type enum matching C++ InputType
+InputTypeEnum = ns.enum("InputType", is_class=True)
+INPUT_TYPES = {
+    "UP": InputTypeEnum.UP,
+    "DOWN": InputTypeEnum.DOWN,
+    "LEFT": InputTypeEnum.LEFT,
+    "RIGHT": InputTypeEnum.RIGHT,
+    "A": InputTypeEnum.A,
+    "B": InputTypeEnum.B,
+    "SELECT": InputTypeEnum.SELECT,
+    "START": InputTypeEnum.START,
+    "L_TRIGGER": InputTypeEnum.L_TRIGGER,
+    "R_TRIGGER": InputTypeEnum.R_TRIGGER,
+    "ROTATE_CW": InputTypeEnum.ROTATE_CW,
+    "ROTATE_CCW": InputTypeEnum.ROTATE_CCW,
+    "TOUCH": InputTypeEnum.TOUCH,
+}
 
 
 CONFIG_SCHEMA = cv.Schema(
@@ -139,25 +160,64 @@ async def setfps_to_code(config, action_id, template_arg, args):
 async def setgame_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
-    tmpl = await cg.templatable(config[CONF_INITIAL_GAME], args, cg.std_string)
-    cg.add(var.set_game(tmpl))
+    game_var = await cg.get_variable(config[CONF_GAME])
+    cg.add(var.set_game(game_var))
     return var
 
 
 @automation.register_action(
     "lvgl_game_runner.send_input",
     SendInputAction,
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.use_id(LvglGameRunner),
+            cv.Required(CONF_INPUT): cv.templatable(cv.enum(INPUT_TYPES)),
+            cv.Optional(CONF_PLAYER, default=1): cv.templatable(cv.int_range(min=1, max=4)),
+            cv.Required(CONF_PRESSED): cv.templatable(cv.boolean),
+        }
+    ),
+)
+@automation.register_action(
+    "lvgl_game_runner.press_input",
+    SendInputAction,
     cv.maybe_simple_value(
         {
             cv.GenerateID(): cv.use_id(LvglGameRunner),
-            cv.Required(CONF_INPUT): cv.templatable(cv.string),
+            cv.Required(CONF_INPUT): cv.templatable(cv.enum(INPUT_TYPES)),
+            cv.Optional(CONF_PLAYER, default=1): cv.templatable(cv.int_range(min=1, max=4)),
+            cv.Optional(CONF_PRESSED, default=True): cv.templatable(cv.boolean),
         },
         key=CONF_INPUT,
     ),
 )
-async def send_input_to_code(config, action_id, template_arg, args):
+@automation.register_action(
+    "lvgl_game_runner.release_input",
+    SendInputAction,
+    cv.maybe_simple_value(
+        {
+            cv.GenerateID(): cv.use_id(LvglGameRunner),
+            cv.Required(CONF_INPUT): cv.templatable(cv.enum(INPUT_TYPES)),
+            cv.Optional(CONF_PLAYER, default=1): cv.templatable(cv.int_range(min=1, max=4)),
+            cv.Optional(CONF_PRESSED, default=False): cv.templatable(cv.boolean),
+        },
+        key=CONF_INPUT,
+    ),
+)
+async def input_action_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
-    tmpl = await cg.templatable(config[CONF_INPUT], args, cg.std_string)
+    tmpl = await cg.templatable(config[CONF_INPUT], args, InputTypeEnum)
     cg.add(var.set_input_type(tmpl))
+
+    # Player number (defaults to 1)
+    player_tmpl = await cg.templatable(config[CONF_PLAYER], args, cg.uint8)
+    cg.add(var.set_player(player_tmpl))
+
+    # All actions have CONF_PRESSED:
+    # - send_input: required (user must specify)
+    # - press_input: default=True
+    # - release_input: default=False
+    pressed_tmpl = await cg.templatable(config[CONF_PRESSED], args, bool)
+    cg.add(var.set_pressed(pressed_tmpl))
+
     return var
