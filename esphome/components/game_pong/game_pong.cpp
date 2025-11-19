@@ -147,6 +147,11 @@ void GamePong::on_input(const InputEvent &event) {
   if (state_.game_over || paused_)
     return;  // Ignore inputs if game over or paused
 
+  // Ignore inputs from external sources for AI-controlled players
+  // AI inputs are injected via update_ai_() and use the processing_ai_inputs_ flag
+  if (!processing_ai_inputs_ && !is_human_player(event.player))
+    return;
+
   // Route inputs based on player number
   // Player 1 controls left paddle, Player 2 controls right paddle
   // Note: Both human and AI inputs are processed here
@@ -196,6 +201,9 @@ void GamePong::update_ai_() {
   }
 
   // Update AI players and inject their inputs
+  // Set flag to allow AI inputs to bypass human player check
+  processing_ai_inputs_ = true;
+
   if (ai_player1_) {
     auto event = ai_player1_->update(0.0f, state_, this);
     on_input(event);
@@ -204,6 +212,8 @@ void GamePong::update_ai_() {
     auto event = ai_player2_->update(0.0f, state_, this);
     on_input(event);
   }
+
+  processing_ai_inputs_ = false;
 }
 
 void GamePong::reset_ball_() {

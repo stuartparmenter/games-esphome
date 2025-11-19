@@ -105,6 +105,9 @@ class GamePong : public GameBase {
   bool input_p2_up_held_{false};    // Player 2 UP button state
   bool input_p2_down_held_{false};  // Player 2 DOWN button state
 
+  // Flag to distinguish AI-injected inputs from external human inputs
+  bool processing_ai_inputs_{false};
+
   // AI controllers (managed by game, created when needed)
   std::unique_ptr<class PongAI> ai_player1_;
   std::unique_ptr<class PongAI> ai_player2_;

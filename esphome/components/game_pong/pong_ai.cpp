@@ -75,12 +75,15 @@ InputEvent PongAI::update(float dt, const GameState &state, const GameBase *game
   InputState desired_state = InputState::NONE;
   if (!target_in_range) {
     // Target is outside paddle range - move toward it
+    // Use a small threshold to avoid oscillation when exactly at center
     float paddle_center_y = paddle_y + paddle_h / 2.0f;
-    if (target_y < paddle_center_y) {
+    float diff = target_y - paddle_center_y;
+    if (diff < -0.5f) {
       desired_state = InputState::UP;
-    } else {
+    } else if (diff > 0.5f) {
       desired_state = InputState::DOWN;
     }
+    // else: stay at NONE if very close to center
   }
 
   // Generate event to transition from current_input_ to desired_state
