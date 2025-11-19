@@ -3,8 +3,11 @@
 
 esphome:
   name: game-runner-demo
-  platform: ESP32
-  board: esp32dev
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
 
 # External components
 external_components:
@@ -53,15 +56,11 @@ game_breakout:
 
 # Game runner configuration
 lvgl_game_runner:
-  - id: snake_game
-    game: snake
-    canvas: game_canvas
-    fps: 30
-    start_paused: false
-    x: 0
-    y: 0
-    width: 0   # 0 = use full canvas width
-    height: 0  # 0 = use full canvas height
+  id: snake_game
+  initial_game: snake
+  canvas: game_canvas
+  fps: 30
+  start_paused: false
 
 # Input controls - Example with buttons
 binary_sensor:
