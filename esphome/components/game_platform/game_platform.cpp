@@ -842,6 +842,8 @@ void GamePlatform::place_enemies_() {
       // Set patrol range
       enemy.patrol_start_x = enemy.x - tile_size_ * 3;
       enemy.patrol_end_x = enemy.x + tile_size_ * 3;
+      enemy.patrol_start_y = enemy.y;
+      enemy.patrol_end_y = enemy.y + tile_size_ * 2;
     }
 
     enemy.last_x = enemy.x;
