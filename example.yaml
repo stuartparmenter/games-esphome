@@ -14,7 +14,7 @@ external_components:
   - source:
       type: local
       path: esphome/components
-    components: [lvgl_game_runner, game_snake, game_breakout]
+    components: [lvgl_game_runner, game_snake, game_breakout, game_pong, game_platform]
 
 # Display configuration (example with ST7789V)
 spi:
@@ -53,6 +53,43 @@ game_snake:
 
 game_breakout:
   id: breakout
+
+# Platform game - side-scrolling platformer with multiplayer support
+game_platform:
+  id: platform
+  # Multiplayer settings (up to 4 players)
+  num_human_players: 2  # Rest will be AI-controlled
+
+  # Level generation seed - same seed produces same levels
+  seed: 42
+  level_width_tiles: 64
+  level_height_tiles: 16
+
+  # Difficulty settings
+  difficulty: normal  # easy, normal, hard, extreme
+  ai_difficulty: intermediate  # beginner, intermediate, advanced, expert
+  initial_lives: 3
+
+  # Level progression
+  enable_hidden_levels: true  # Secret bonus levels
+  boss_every_n_levels: 5  # Boss fight frequency
+
+  # Physics tuning
+  player_speed: 1.0  # 0.5 to 3.0
+  jump_strength: 1.0  # 0.5 to 2.0
+  gravity: 1.0  # 0.5 to 2.0
+
+  # Player abilities
+  enable_double_jump: false
+  enable_wall_jump: false
+
+  # Multiplayer mechanics
+  friendly_fire: false  # Teammates can't hurt each other
+  shared_lives: false  # All players share a life pool
+
+  # Content density
+  max_enemies_per_level: 10
+  powerup_frequency: 1.0  # Multiplier for powerup spawn rate
 
 # Game runner configuration
 lvgl_game_runner:
@@ -120,6 +157,73 @@ binary_sensor:
       - lvgl_game_runner.send_input:
           id: snake_game
           input: "START"
+
+  # A button (Jump in platform game)
+  - platform: gpio
+    id: button_a
+    pin:
+      number: GPIO27
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "A"
+    on_release:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "A"
+          pressed: false
+
+  # B button (Action/Shoot in platform game)
+  - platform: gpio
+    id: button_b
+    pin:
+      number: GPIO14
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "B"
+
+  # Player 2 controls (for multiplayer platform game)
+  # Note: player parameter specifies which player (0-3)
+  - platform: gpio
+    id: p2_button_left
+    pin:
+      number: GPIO12
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "LEFT"
+          player: 1
+
+  - platform: gpio
+    id: p2_button_right
+    pin:
+      number: GPIO13
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "RIGHT"
+          player: 1
+
+  - platform: gpio
+    id: p2_button_jump
+    pin:
+      number: GPIO15
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - lvgl_game_runner.send_input:
+          id: snake_game
+          input: "A"
+          player: 1
 
 # Alternative: Rotary encoder input
 # sensor:
