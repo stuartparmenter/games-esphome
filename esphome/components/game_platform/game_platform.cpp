@@ -64,6 +64,11 @@ lvgl_game_runner::InputEvent PlatformAI::update(float dt, const lvgl_game_runner
   decision_timer_ = 0.0f;
   current_delay_ = get_reaction_time_();
 
+  // Store previous state
+  bool was_holding_left = holding_left_;
+  bool was_holding_right = holding_right_;
+  bool was_holding_jump = holding_jump_;
+
   // Get game state
   const auto &enemies = platform_game->get_enemies();
   const auto &powerups = platform_game->get_powerups();
@@ -72,15 +77,22 @@ lvgl_game_runner::InputEvent PlatformAI::update(float dt, const lvgl_game_runner
   // Make decision
   make_decision_(player, enemies, powerups, goal_x);
 
-  // Determine which input to send based on AI state
-  if (holding_jump_ && last_input_ != lvgl_game_runner::InputType::A) {
-    last_input_ = lvgl_game_runner::InputType::A;
+  // Send release events for buttons that were released
+  if (was_holding_left && !holding_left_) {
+    return lvgl_game_runner::InputEvent(lvgl_game_runner::InputType::LEFT, player_num_, false);
+  }
+  if (was_holding_right && !holding_right_) {
+    return lvgl_game_runner::InputEvent(lvgl_game_runner::InputType::RIGHT, player_num_, false);
+  }
+
+  // Send press events for new button presses
+  if (holding_jump_ && !was_holding_jump) {
     return lvgl_game_runner::InputEvent(lvgl_game_runner::InputType::A, player_num_, true);
-  } else if (holding_right_ && !holding_left_) {
-    last_input_ = lvgl_game_runner::InputType::RIGHT;
+  }
+  if (holding_right_ && !was_holding_right) {
     return lvgl_game_runner::InputEvent(lvgl_game_runner::InputType::RIGHT, player_num_, true);
-  } else if (holding_left_ && !holding_right_) {
-    last_input_ = lvgl_game_runner::InputType::LEFT;
+  }
+  if (holding_left_ && !was_holding_left) {
     return lvgl_game_runner::InputEvent(lvgl_game_runner::InputType::LEFT, player_num_, true);
   }
 
