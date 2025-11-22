@@ -11,7 +11,7 @@ external_components:
   - source:
       type: local
       path: esphome/components
-    components: [lvgl_game_runner, game_snake, game_breakout]
+    components: [lvgl_game_runner, game_snake, game_breakout, game_zaxxon]
 
 # Display configuration (example with ST7789V)
 spi:
@@ -50,6 +50,9 @@ game_snake:
 
 game_breakout:
   id: breakout
+
+game_zaxxon:
+  id: zaxxon
 
 # Game runner configuration
 lvgl_game_runner:
