@@ -15,12 +15,12 @@ jobs:
     environment: release-drafter
     runs-on: ubuntu-latest
     steps:
-      - uses: release-drafter/release-drafter@v6
+      - uses: release-drafter/release-drafter@v7
         id: drafter
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Update version files
         run: |
