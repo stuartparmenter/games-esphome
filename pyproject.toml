@@ -1,6 +1,6 @@
 [project]
 name = "games-esphome"
-version = "0.1.0"
+version = "0.0.1"
 description = "Game Runner for ESPHome"
 readme = "README.md"
 requires-python = ">=3.11"
